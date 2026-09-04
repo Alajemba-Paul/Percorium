@@ -1,0 +1,38 @@
+# dependencies
+node_modules/
+
+# env / secrets — never commit keys
+.env
+.env.local
+.env*.local
+OPS_PRIVATE_KEY
+OPS_PRIVATE_KEY.*
+*.pem
+
+# build
+.next
+out
+dist
+coverage
+.vercel
+.tanstack
+.nitro
+.output
+*.tsbuildinfo
+
+# logs / os / editor
+.DS_Store
+*.log
+npm-debug.log*
+.idea/
+.vscode/
+
+# grok sandbox internals (not the product)
+.grok/
+artifacts/
+attachments/
+screenshots/
+AGENTS.md
+AGENTS.project.md
+.node_modules.lock
+startup.sh
