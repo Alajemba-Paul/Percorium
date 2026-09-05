@@ -40,7 +40,7 @@ export type QuoteRequest = {
 
 export type QuoteResult = {
   ok: boolean;
-  source: "0x" | "1inch" | "oracle";
+  source: "0x" | "1inch" | "aerodrome" | "oracle";
   sellToken: `0x${string}`;
   buyToken: `0x${string}`;
   sellAmount: string;
@@ -52,6 +52,7 @@ export type QuoteResult = {
   data?: `0x${string}`;
   value?: string;
   allowanceTarget?: `0x${string}`;
+  executable?: boolean;
   issues?: string[];
   error?: string;
 };

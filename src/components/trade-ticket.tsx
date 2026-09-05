@@ -115,23 +115,41 @@ export function TradeTicket({
   }
 
   async function onExecute() {
-    if (locked || !quoteRes?.ok || !quoteRes.to || !quoteRes.data) {
-      toast.error("Ticket is fail-closed. No executable route.");
+    if (locked) {
+      toast.error("Ticket is fail-closed.");
+      return;
+    }
+    if (!address) {
+      toast.error("Connect a wallet to execute.");
       return;
     }
     try {
-      if (quoteRes.allowanceTarget && address) {
+      const sellAmount = parseUnits(amount || "0", route.sellDec).toString();
+      const fresh = await fetchSwapQuote({
+        data: {
+          sellToken: route.sellToken,
+          buyToken: route.buyToken,
+          sellAmount,
+          taker: address,
+        },
+      });
+      setQuoteRes(fresh);
+      if (!fresh.ok || !fresh.to || !fresh.data) {
+        toast.error(fresh.error ?? "No executable route. Check the quote notes.");
+        return;
+      }
+      if (fresh.allowanceTarget) {
         await writeContractAsync({
           address: route.sellToken,
           abi: ERC20_ABI,
           functionName: "approve",
-          args: [quoteRes.allowanceTarget, BigInt(quoteRes.sellAmount)],
+          args: [fresh.allowanceTarget, BigInt(fresh.sellAmount)],
         });
       }
       const hash = await sendTransactionAsync({
-        to: quoteRes.to,
-        data: quoteRes.data,
-        value: quoteRes.value ? BigInt(quoteRes.value) : 0n,
+        to: fresh.to,
+        data: fresh.data,
+        value: fresh.value ? BigInt(fresh.value) : 0n,
       });
       toast.success(`Submitted ${hash.slice(0, 10)}…`);
     } catch (err) {
@@ -152,7 +170,7 @@ export function TradeTicket({
       <div className="mb-4 flex items-center justify-between">
         <h2 className="font-display text-xl">Ticket</h2>
         <span className="font-mono text-[11px] text-muted-foreground">
-          0x · 1inch fallback
+          0x · 1inch · Aerodrome
         </span>
       </div>
       <Tabs value={side} onValueChange={(v) => setSide(v as SwapSide)}>
@@ -232,6 +250,15 @@ export function TradeTicket({
               {issue}
             </p>
           ))}
+          {quoteRes.error ? (
+            <p className="text-xs text-destructive">{quoteRes.error}</p>
+          ) : null}
+          {quoteRes.ok && !quoteRes.executable && !isConnected ? (
+            <p className="text-xs text-warn">
+              Connect a wallet and execute — the desk will pull a firm 0x/Aerodrome
+              quote with calldata.
+            </p>
+          ) : null}
         </dl>
       ) : null}
 
@@ -253,10 +280,11 @@ export function TradeTicket({
         className={cn("mt-4 w-full")}
         disabled={
           locked ||
-          !quoteRes?.ok ||
           sending ||
           approving ||
-          !isConnected
+          !isConnected ||
+          !quoteRes ||
+          quoteRes.source === "oracle"
         }
         onClick={onExecute}
       >
@@ -264,11 +292,14 @@ export function TradeTicket({
           ? "Submitting"
           : !isConnected
             ? "Connect to execute"
-            : `Execute ${side}`}
+            : quoteRes?.source === "oracle"
+              ? "No live route"
+              : `Execute ${side}`}
       </Button>
       <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
         Allowlist: official Coinbase B20 addresses only. AMM print is premium or
-        discount, not the risk price.
+        discount, not the risk price. 0x is tried first; Aerodrome is the
+        official USDC pool if the aggregator has no B20 route.
       </p>
     </div>
   );

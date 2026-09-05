@@ -121,6 +121,75 @@ export const B20_ABI = [
   },
 ] as const;
 
+const AERO_ROUTE = {
+  name: "routes",
+  type: "tuple[]",
+  components: [
+    { name: "from", type: "address" },
+    { name: "to", type: "address" },
+    { name: "stable", type: "bool" },
+    { name: "factory", type: "address" },
+  ],
+} as const;
+
+export const AERO_ROUTER_ABI = [
+  {
+    type: "function",
+    name: "getAmountsOut",
+    stateMutability: "view",
+    inputs: [{ name: "amountIn", type: "uint256" }, AERO_ROUTE],
+    outputs: [{ name: "amounts", type: "uint256[]" }],
+  },
+  {
+    type: "function",
+    name: "swapExactTokensForTokens",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "amountIn", type: "uint256" },
+      { name: "amountOutMin", type: "uint256" },
+      AERO_ROUTE,
+      { name: "to", type: "address" },
+      { name: "deadline", type: "uint256" },
+    ],
+    outputs: [{ name: "amounts", type: "uint256[]" }],
+  },
+] as const;
+
+export const AERO_FACTORY_ABI = [
+  {
+    type: "function",
+    name: "getPool",
+    stateMutability: "view",
+    inputs: [
+      { name: "tokenA", type: "address" },
+      { name: "tokenB", type: "address" },
+      { name: "stable", type: "bool" },
+    ],
+    outputs: [{ name: "", type: "address" }],
+  },
+] as const;
+
+export const AERO_PAIR_ABI = [
+  {
+    type: "function",
+    name: "token0",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
+    type: "function",
+    name: "getReserves",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [
+      { name: "reserve0", type: "uint256" },
+      { name: "reserve1", type: "uint256" },
+      { name: "blockTimestampLast", type: "uint256" },
+    ],
+  },
+] as const;
+
 export const MORPHO_BLUE_ABI = [
   {
     type: "function",

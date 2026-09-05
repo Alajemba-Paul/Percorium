@@ -1,14 +1,31 @@
 import { createServerFn } from "@tanstack/react-start";
-import { parseUnits } from "viem";
 import {
+  encodeFunctionData,
+  getAddress,
+  isAddress,
+  parseUnits,
+} from "viem";
+import {
+  AERO_FACTORY,
+  AERO_ROUTER,
   ALLOWED_TRADE_TOKENS,
   BASIS_REJECT_BPS,
   STOCK_BY_ADDRESS,
   USDC,
+  ZERO_EX_ALLOWANCE_HOLDER,
 } from "./constants";
+import {
+  AERO_FACTORY_ABI,
+  AERO_PAIR_ABI,
+  AERO_ROUTER_ABI,
+  AGGREGATOR_V3_ABI,
+} from "./abis";
+import { hasOneInchKey, hasZeroExKey, oneInchApiKey, zeroExApiKey } from "./env";
 import { getPublicClient } from "./rpc";
-import { AGGREGATOR_V3_ABI } from "./abis";
 import type { QuoteRequest, QuoteResult } from "./types";
+
+const SLIPPAGE_BPS = 100;
+const ZERO_EX_VERSION = "v2";
 
 function isAllowed(addr: string) {
   return ALLOWED_TRADE_TOKENS.has(addr.toLowerCase());
@@ -16,6 +33,14 @@ function isAllowed(addr: string) {
 
 function tokenDecimals(addr: string): number {
   return addr.toLowerCase() === USDC.toLowerCase() ? 6 : 18;
+}
+
+function asAddr(addr: string): `0x${string}` {
+  return getAddress(addr);
+}
+
+function isRealTaker(taker?: string): taker is `0x${string}` {
+  return Boolean(taker && isAddress(taker) && !/^0x0{40}$/i.test(taker));
 }
 
 async function oraclePx(token: string): Promise<number | null> {
@@ -31,83 +56,305 @@ async function oraclePx(token: string): Promise<number | null> {
   return Number(round[1]) / 1e8;
 }
 
-async function quote0x(req: QuoteRequest, taker: string): Promise<QuoteResult | null> {
-  const key = process.env.ZERO_EX_API_KEY;
-  if (!key) return null;
-  const url = new URL("https://api.0x.org/swap/allowance-holder/quote");
-  url.searchParams.set("chainId", "8453");
-  url.searchParams.set("sellToken", req.sellToken);
-  url.searchParams.set("buyToken", req.buyToken);
-  url.searchParams.set("sellAmount", req.sellAmount);
-  url.searchParams.set("taker", taker);
-  const res = await fetch(url, {
-    headers: {
-      "0x-api-key": key,
-      "0x-version": "v2",
-      accept: "application/json",
-    },
-  });
-  if (!res.ok) return null;
-  const json = (await res.json()) as {
-    buyAmount?: string;
-    sellAmount?: string;
-    transaction?: { to?: string; data?: string; value?: string; gas?: string };
-    issues?: { allowance?: { spender?: string } };
-    minBuyAmount?: string;
-  };
-  if (!json.buyAmount) return null;
+type RouterAttempt = { quote: QuoteResult | null; note: string };
+
+async function readJson(res: Response): Promise<Record<string, unknown>> {
+  const text = await res.text();
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return { message: text.slice(0, 240) };
+  }
+}
+
+function errMsg(json: Record<string, unknown>, status: number): string {
+  const msg =
+    (typeof json.message === "string" && json.message) ||
+    (typeof json.reason === "string" && json.reason) ||
+    (typeof json.description === "string" && json.description) ||
+    (typeof json.name === "string" && json.name) ||
+    `HTTP ${status}`;
+  return msg.slice(0, 220);
+}
+
+function from0xBody(
+  json: Record<string, unknown>,
+  req: QuoteRequest,
+): QuoteResult | null {
+  const buyAmount = typeof json.buyAmount === "string" ? json.buyAmount : null;
+  if (!buyAmount || buyAmount === "0") return null;
+  if (json.liquidityAvailable === false) return null;
+  const tx = json.transaction as
+    | { to?: string; data?: string; value?: string; gas?: string | number }
+    | undefined;
+  const issues = json.issues as
+    | { allowance?: { spender?: string } | null }
+    | undefined;
+  const to = (tx?.to ?? undefined) as `0x${string}` | undefined;
+  const data = (tx?.data ?? undefined) as `0x${string}` | undefined;
   return {
     ok: true,
     source: "0x",
     sellToken: req.sellToken,
     buyToken: req.buyToken,
-    sellAmount: json.sellAmount ?? req.sellAmount,
-    buyAmount: json.buyAmount,
-    minBuyAmount: json.minBuyAmount,
+    sellAmount: typeof json.sellAmount === "string" ? json.sellAmount : req.sellAmount,
+    buyAmount,
+    minBuyAmount: typeof json.minBuyAmount === "string" ? json.minBuyAmount : undefined,
     price: "0",
-    estimatedGas: json.transaction?.gas,
-    to: json.transaction?.to as `0x${string}` | undefined,
-    data: json.transaction?.data as `0x${string}` | undefined,
-    value: json.transaction?.value ?? "0",
-    allowanceTarget: json.issues?.allowance?.spender as `0x${string}` | undefined,
+    estimatedGas: tx?.gas != null ? String(tx.gas) : undefined,
+    to,
+    data,
+    value: tx?.value ?? "0",
+    allowanceTarget:
+      (issues?.allowance?.spender as `0x${string}` | undefined) ??
+      (data ? ZERO_EX_ALLOWANCE_HOLDER : undefined),
+    executable: Boolean(to && data),
   };
 }
 
-async function quote1inch(req: QuoteRequest, taker: string): Promise<QuoteResult | null> {
-  const key = process.env.ONEINCH_API_KEY;
-  if (!key) return null;
-  const url = new URL("https://api.1inch.com/swap/v6.1/8453/swap");
-  url.searchParams.set("src", req.sellToken);
-  url.searchParams.set("dst", req.buyToken);
+async function quote0x(req: QuoteRequest): Promise<RouterAttempt> {
+  const key = zeroExApiKey();
+  if (!key) return { quote: null, note: "0x key missing in runtime env" };
+
+  const taker = isRealTaker(req.taker) ? req.taker : undefined;
+  const path = taker
+    ? "/swap/allowance-holder/quote"
+    : "/swap/allowance-holder/price";
+  const url = new URL(`https://api.0x.org${path}`);
+  url.searchParams.set("chainId", "8453");
+  url.searchParams.set("sellToken", asAddr(req.sellToken));
+  url.searchParams.set("buyToken", asAddr(req.buyToken));
+  url.searchParams.set("sellAmount", req.sellAmount);
+  url.searchParams.set("slippageBps", String(SLIPPAGE_BPS));
+  if (taker) url.searchParams.set("taker", asAddr(taker));
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "0x-api-key": key,
+        "0x-version": ZERO_EX_VERSION,
+        accept: "application/json",
+      },
+      signal: AbortSignal.timeout(12_000),
+    });
+    const json = await readJson(res);
+    if (!res.ok) {
+      return { quote: null, note: `0x ${res.status}: ${errMsg(json, res.status)}` };
+    }
+    const quote = from0xBody(json, req);
+    if (!quote) {
+      return { quote: null, note: "0x: no liquidity for this pair" };
+    }
+    if (!taker) {
+      quote.issues = ["0x price (connect wallet for calldata)"];
+    }
+    return { quote, note: taker ? "0x quote" : "0x price" };
+  } catch (err) {
+    return {
+      quote: null,
+      note: `0x network: ${err instanceof Error ? err.message : "fetch failed"}`,
+    };
+  }
+}
+
+async function quote1inch(req: QuoteRequest): Promise<RouterAttempt> {
+  const key = oneInchApiKey();
+  if (!key) return { quote: null, note: "1inch key missing in runtime env" };
+
+  const taker = isRealTaker(req.taker) ? req.taker : undefined;
+  const path = taker ? "swap" : "quote";
+  const url = new URL(`https://api.1inch.com/swap/v6.1/8453/${path}`);
+  url.searchParams.set("src", asAddr(req.sellToken));
+  url.searchParams.set("dst", asAddr(req.buyToken));
   url.searchParams.set("amount", req.sellAmount);
-  url.searchParams.set("from", taker);
   url.searchParams.set("slippage", "1");
-  url.searchParams.set("disableEstimate", "true");
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${key}`,
-      accept: "application/json",
-    },
+  if (taker) {
+    url.searchParams.set("from", asAddr(taker));
+    url.searchParams.set("disableEstimate", "true");
+  }
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${key}`,
+        accept: "application/json",
+      },
+      signal: AbortSignal.timeout(12_000),
+    });
+    const json = await readJson(res);
+    if (!res.ok) {
+      return {
+        quote: null,
+        note: `1inch ${res.status}: ${errMsg(json, res.status)}`,
+      };
+    }
+    const buyAmount =
+      (typeof json.dstAmount === "string" && json.dstAmount) ||
+      (typeof json.toAmount === "string" && json.toAmount) ||
+      null;
+    if (!buyAmount) return { quote: null, note: "1inch: empty dstAmount" };
+    const tx = json.tx as
+      | { to?: string; data?: string; value?: string; gas?: number }
+      | undefined;
+    return {
+      quote: {
+        ok: true,
+        source: "1inch",
+        sellToken: req.sellToken,
+        buyToken: req.buyToken,
+        sellAmount: req.sellAmount,
+        buyAmount,
+        price: "0",
+        estimatedGas: tx?.gas ? String(tx.gas) : undefined,
+        to: tx?.to as `0x${string}` | undefined,
+        data: tx?.data as `0x${string}` | undefined,
+        value: tx?.value ?? "0",
+        allowanceTarget: (tx?.to ?? undefined) as `0x${string}` | undefined,
+        executable: Boolean(tx?.to && tx?.data),
+      },
+      note: taker ? "1inch swap" : "1inch quote",
+    };
+  } catch (err) {
+    return {
+      quote: null,
+      note: `1inch network: ${err instanceof Error ? err.message : "fetch failed"}`,
+    };
+  }
+}
+
+type AeroRoute = {
+  from: `0x${string}`;
+  to: `0x${string}`;
+  stable: boolean;
+  factory: `0x${string}`;
+};
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
+const MIN_USDC_RESERVE = 200n * 1_000_000n; // 200 USDC
+
+async function aeroUsdcReserve(token: string): Promise<bigint | null> {
+  const client = getPublicClient();
+  const pool = await client.readContract({
+    address: AERO_FACTORY,
+    abi: AERO_FACTORY_ABI,
+    functionName: "getPool",
+    args: [asAddr(token), asAddr(USDC), false],
   });
-  if (!res.ok) return null;
-  const json = (await res.json()) as {
-    dstAmount?: string;
-    tx?: { to?: string; data?: string; value?: string; gas?: number };
-  };
-  if (!json.dstAmount) return null;
+  if (!pool || pool.toLowerCase() === ZERO_ADDRESS) return null;
+  const [token0, reserves] = await Promise.all([
+    client.readContract({ address: pool, abi: AERO_PAIR_ABI, functionName: "token0" }),
+    client.readContract({ address: pool, abi: AERO_PAIR_ABI, functionName: "getReserves" }),
+  ]);
+  const usdcIs0 = token0.toLowerCase() === USDC.toLowerCase();
+  return usdcIs0 ? reserves[0] : reserves[1];
+}
+
+function hop(from: string, to: string): AeroRoute {
   return {
-    ok: true,
-    source: "1inch",
-    sellToken: req.sellToken,
-    buyToken: req.buyToken,
-    sellAmount: req.sellAmount,
-    buyAmount: json.dstAmount,
-    price: "0",
-    estimatedGas: json.tx?.gas ? String(json.tx.gas) : undefined,
-    to: json.tx?.to as `0x${string}` | undefined,
-    data: json.tx?.data as `0x${string}` | undefined,
-    value: json.tx?.value ?? "0",
-    allowanceTarget: json.tx?.to as `0x${string}` | undefined,
+    from: asAddr(from),
+    to: asAddr(to),
+    stable: false,
+    factory: AERO_FACTORY,
+  };
+}
+
+async function quoteAerodrome(req: QuoteRequest): Promise<RouterAttempt> {
+  const sell = req.sellToken.toLowerCase();
+  const buy = req.buyToken.toLowerCase();
+  const usdc = USDC.toLowerCase();
+
+  const routes: AeroRoute[] = [];
+  try {
+    if (sell === usdc || buy === usdc) {
+      const stock = sell === usdc ? req.buyToken : req.sellToken;
+      const reserve = await aeroUsdcReserve(stock);
+      if (reserve == null) {
+        return { quote: null, note: "Aerodrome V2: no USDC pool" };
+      }
+      if (reserve < MIN_USDC_RESERVE) {
+        return {
+          quote: null,
+          note: `Aerodrome V2 pool too thin (${reserve.toString()} USDC raw)`,
+        };
+      }
+      routes.push(hop(req.sellToken, req.buyToken));
+    } else {
+      const [a, b] = await Promise.all([
+        aeroUsdcReserve(req.sellToken),
+        aeroUsdcReserve(req.buyToken),
+      ]);
+      if (a == null || b == null) {
+        return { quote: null, note: "Aerodrome V2: missing USDC pool for a leg" };
+      }
+      if (a < MIN_USDC_RESERVE || b < MIN_USDC_RESERVE) {
+        return { quote: null, note: "Aerodrome V2: a hop is too thin" };
+      }
+      routes.push(hop(req.sellToken, USDC), hop(USDC, req.buyToken));
+    }
+  } catch (err) {
+    return {
+      quote: null,
+      note: `Aerodrome pool lookup: ${err instanceof Error ? err.message : "revert"}`,
+    };
+  }
+
+  const client = getPublicClient();
+  let amounts: readonly bigint[];
+  try {
+    amounts = await client.readContract({
+      address: AERO_ROUTER,
+      abi: AERO_ROUTER_ABI,
+      functionName: "getAmountsOut",
+      args: [BigInt(req.sellAmount), routes],
+    });
+  } catch (err) {
+    return {
+      quote: null,
+      note: `Aerodrome getAmountsOut: ${err instanceof Error ? err.message : "revert"}`,
+    };
+  }
+  const buyRaw = amounts[amounts.length - 1];
+  if (!buyRaw || buyRaw === 0n) {
+    return { quote: null, note: "Aerodrome: zero output" };
+  }
+  const minOut = (buyRaw * BigInt(10_000 - SLIPPAGE_BPS)) / 10_000n;
+  const taker = isRealTaker(req.taker) ? asAddr(req.taker) : undefined;
+  let to: `0x${string}` | undefined;
+  let data: `0x${string}` | undefined;
+  if (taker) {
+    to = AERO_ROUTER;
+    data = encodeFunctionData({
+      abi: AERO_ROUTER_ABI,
+      functionName: "swapExactTokensForTokens",
+      args: [
+        BigInt(req.sellAmount),
+        minOut,
+        routes,
+        taker,
+        BigInt(Math.floor(Date.now() / 1000) + 20 * 60),
+      ],
+    });
+  }
+  return {
+    quote: {
+      ok: true,
+      source: "aerodrome",
+      sellToken: req.sellToken,
+      buyToken: req.buyToken,
+      sellAmount: req.sellAmount,
+      buyAmount: buyRaw.toString(),
+      minBuyAmount: minOut.toString(),
+      price: "0",
+      to,
+      data,
+      value: "0",
+      allowanceTarget: data ? AERO_ROUTER : undefined,
+      executable: Boolean(to && data),
+      issues: data
+        ? ["Aerodrome official USDC pool"]
+        : ["Aerodrome price (connect wallet for calldata)"],
+    },
+    note: "Aerodrome official USDC pool",
   };
 }
 
@@ -129,21 +376,23 @@ export const fetchSwapQuote = createServerFn({ method: "POST" })
       };
     }
 
-    const taker = data.taker ?? "0x0000000000000000000000000000000000000001";
-    let live: QuoteResult | null = null;
-    try {
-      live = await quote0x(data, taker);
-    } catch {
-      issues.push("0x unavailable");
+    issues.push(
+      hasZeroExKey() ? "0x key: loaded" : "0x key: not in runtime env",
+    );
+    issues.push(
+      hasOneInchKey() ? "1inch key: loaded" : "1inch key: not in runtime env",
+    );
+
+    const attempts: RouterAttempt[] = [];
+    attempts.push(await quote0x(data));
+    if (!attempts.some((a) => a.quote)) attempts.push(await quote1inch(data));
+    if (!attempts.some((a) => a.quote)) attempts.push(await quoteAerodrome(data));
+
+    for (const attempt of attempts) {
+      if (attempt.note) issues.push(attempt.note);
     }
-    if (!live) {
-      try {
-        live = await quote1inch(data, taker);
-        if (live) issues.push("fell back to 1inch");
-      } catch {
-        issues.push("1inch unavailable");
-      }
-    }
+
+    const live = attempts.find((a) => a.quote)?.quote ?? null;
 
     const sellDec = tokenDecimals(data.sellToken);
     const buyDec = tokenDecimals(data.buyToken);
@@ -171,23 +420,28 @@ export const fetchSwapQuote = createServerFn({ method: "POST" })
     if (live) {
       const ammBuy = Number(live.buyAmount) / 10 ** buyDec;
       const bps = Math.round(((ammBuy - oracleBuy) / oracleBuy) * 10_000);
+      const tagged = {
+        ...live,
+        price: sellUnits > 0 ? (ammBuy / sellUnits).toString() : "0",
+        issues: [...issues, ...(live.issues ?? []), `basis ${bps} bps vs Chainlink`],
+      };
       if (Math.abs(bps) > BASIS_REJECT_BPS) {
         return {
-          ...live,
+          ...tagged,
           ok: false,
-          price: (ammBuy / sellUnits).toString(),
-          issues: [...issues, `basis ${bps} bps vs Chainlink exceeds cap`],
+          executable: false,
           error: "AMM quote deviates too far from the Chainlink risk price.",
         };
       }
-      return {
-        ...live,
-        price: (ammBuy / sellUnits).toString(),
-        issues: [...issues, `basis ${bps} bps vs Chainlink`],
-      };
+      return tagged;
     }
 
-    issues.push("No 0x/1inch key — showing Chainlink-indicative size. Execution is disabled.");
+    const keyless = !hasZeroExKey() && !hasOneInchKey();
+    issues.push(
+      keyless
+        ? "No 0x/1inch key in the server runtime — showing Chainlink-indicative size."
+        : "Routers returned no route — showing Chainlink-indicative size. Execution is disabled.",
+    );
     return {
       ok: false,
       source: "oracle",
@@ -195,8 +449,11 @@ export const fetchSwapQuote = createServerFn({ method: "POST" })
       buyToken: data.buyToken,
       sellAmount: data.sellAmount,
       buyAmount: oracleBuyRaw,
-      price: (oracleBuy / sellUnits).toString(),
+      price: sellUnits > 0 ? (oracleBuy / sellUnits).toString() : "0",
+      executable: false,
       issues,
-      error: "Live router quote unavailable. Ticket is fail-closed.",
+      error: keyless
+        ? "Live router quote unavailable. Set ZERO_EX_API_KEY on the server runtime (not only at build) and redeploy."
+        : "0x/1inch/Aerodrome had no executable route for this pair.",
     };
   });

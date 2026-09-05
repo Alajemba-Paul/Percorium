@@ -53,7 +53,7 @@ Without 0x / 1inch keys the ticket still quotes Chainlink-indicative size and **
 
 ## Environment variables
 
-Names only. Do not put secrets in git. Set the same keys in Vercel → Settings → Environment Variables for Production + Preview.
+Names only. Do not put secrets in git. Set the same keys in Vercel → Settings → Environment Variables for **Production + Preview**, available at **Runtime** (Build optional). After changing keys, **redeploy** — adding a key to an already-built deployment does nothing until the server runs with it.
 
 ```
 NEXT_PUBLIC_CDP_CLIENT_API_KEY
@@ -64,6 +64,8 @@ ONEINCH_API_KEY
 BASE_RPC
 CRON_SECRET
 ```
+
+The quote handler reads `ZERO_EX_API_KEY` / `ONEINCH_API_KEY` at request time (not build-time). The ticket lists `0x key: loaded` or `0x key: not in runtime env` so a missing runtime secret is obvious. Swap path: 0x → 1inch → Aerodrome V2 official USDC pool.
 
 ## Stack
 
