@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { to: "/", label: "Overview", icon: Sparkles },
   { to: "/swap", label: "Trade" },
-  { to: "/indices", label: "Baskets" },
+  { to: "/baskets", label: "Baskets" },
 ] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {

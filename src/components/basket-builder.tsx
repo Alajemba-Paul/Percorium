@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   Check,
@@ -49,6 +49,7 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
     Object.fromEntries(initialStocks.map((s) => [s.symbol, s.weight])),
   );
   const [copied, setCopied] = useState(false);
+  const urlInputRef = useRef<HTMLInputElement>(null);
 
   const board = usePriceBoard();
   const quotes = useMemo(
@@ -92,10 +93,11 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
 
   const shareableUrl = useMemo(() => {
     if (!basketPayload) return "";
-    if (typeof window !== "undefined") {
-      return `${window.location.origin}/b/${basketPayload}`;
-    }
-    return `https://percorium.app/b/${basketPayload}`;
+    const origin =
+      typeof window !== "undefined" && window.location?.origin
+        ? window.location.origin
+        : "https://percorium.app";
+    return `${origin}/b/${basketPayload}`;
   }, [basketPayload]);
 
   const handleDistributeEqually = () => {
@@ -166,12 +168,20 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
       return;
     }
     try {
-      await navigator.clipboard.writeText(shareableUrl);
-      setCopied(true);
-      toast.success("Basket link copied to clipboard!");
-      setTimeout(() => setCopied(false), 2500);
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareableUrl);
+        setCopied(true);
+        toast.success("Link copied.");
+        setTimeout(() => setCopied(false), 2500);
+        return;
+      }
+      throw new Error("Clipboard API unavailable");
     } catch {
-      toast.error("Failed to copy link to clipboard.");
+      if (urlInputRef.current) {
+        urlInputRef.current.focus();
+        urlInputRef.current.select();
+      }
+      toast.info("Copy the link above.");
     }
   };
 
@@ -214,7 +224,7 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
             </h2>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            Bundle official Coinbase B20 stocks into a shareable link. No token minting required.
+            Bundle official Coinbase B20 stocks into a shareable link. No token minting or sign-in required.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -235,7 +245,7 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
         <div className="space-y-4">
           <div>
             <div className="flex items-center justify-between">
-              <Label htmlFor="basket-name" className="text-xs">
+              <Label htmlFor="basket-name" className="text-xs font-medium">
                 Basket Name
               </Label>
               <span className="font-mono text-[10px] text-muted-foreground">
@@ -253,7 +263,7 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
           </div>
 
           <div>
-            <Label htmlFor="basket-spend" className="text-xs">
+            <Label htmlFor="basket-spend" className="text-xs font-medium">
               Target Spend (USDC)
             </Label>
             <Input
@@ -271,10 +281,10 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
           {/* Add more stocks */}
           {availableToAdd.length > 0 && selectedStocks.length < 10 && (
             <div>
-              <Label className="text-xs text-muted-foreground">
+              <Label className="text-xs font-medium text-muted-foreground">
                 Add Stocks to Basket ({selectedStocks.length}/10)
               </Label>
-              <div className="mt-2 flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
+              <div className="mt-2 flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
                 {availableToAdd.map((stock) => (
                   <button
                     key={stock.symbol}
@@ -297,7 +307,7 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
         {/* Right Column: Weight Allocation */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <Label className="text-xs">Stocks & Allocation</Label>
+            <Label className="text-xs font-medium">Stocks & Allocation</Label>
             <div className="flex items-center gap-2">
               <span
                 className={`font-mono text-xs font-medium tabular-nums ${
@@ -384,63 +394,89 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
         </div>
       </div>
 
-      {/* Share / Action Bar */}
-      <div className="mt-6 border-t border-border pt-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium text-foreground">Shareable Link</p>
-            <p className="truncate font-mono text-[11px] text-muted-foreground">
-              {shareableUrl || "Set weights to 100% to generate link"}
+      {/* When weights sum to 100: Always-visible Controls (Input readonly URL + Copy link button) */}
+      {isBasketValid ? (
+        <div className="mt-6 rounded-xl border border-primary/30 bg-primary/5 p-4 sm:p-5">
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Share2 className="size-4 text-primary" />
+                <span className="font-display text-base font-semibold text-foreground">
+                  Shareable Basket Link
+                </span>
+              </div>
+              <Badge variant="live" className="text-[10px] py-0.5">
+                Ready to Share
+              </Badge>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Anyone with this link can view this portfolio and buy into all {selectedStocks.length} official Coinbase stocks on Base.
             </p>
-          </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={!isBasketValid}
-              onClick={handleCopyLink}
-              className="text-xs"
-            >
-              {copied ? (
-                <Check className="mr-1.5 size-3.5 text-emerald-500" />
-              ) : (
-                <Copy className="mr-1.5 size-3.5" />
-              )}
-              {copied ? "Copied" : "Copy Link"}
-            </Button>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mt-1">
+              <div className="relative flex-1">
+                <Input
+                  ref={urlInputRef}
+                  readOnly
+                  value={shareableUrl}
+                  onFocus={(e) => e.target.select()}
+                  className="font-mono text-xs h-10 bg-card border-border/80 pr-3 selection:bg-primary/20 text-foreground"
+                />
+              </div>
 
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!isBasketValid}
-              onClick={handleShare}
-              className="text-xs"
-            >
-              <Share2 className="mr-1.5 size-3.5" />
-              Share
-            </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  onClick={handleCopyLink}
+                  className="h-10 px-4 text-xs font-semibold shrink-0"
+                >
+                  {copied ? (
+                    <Check className="mr-1.5 size-4 text-emerald-300" />
+                  ) : (
+                    <Copy className="mr-1.5 size-4" />
+                  )}
+                  {copied ? "Copied" : "Copy link"}
+                </Button>
 
-            {basketPayload ? (
-              <Button asChild size="sm" className="text-xs">
-                <Link to="/b/$payload" params={{ payload: basketPayload }}>
-                  Open Basket
-                  <ExternalLink className="ml-1.5 size-3.5" />
-                </Link>
-              </Button>
-            ) : (
-              <Button size="sm" disabled className="text-xs">
-                Open Basket
-                <ExternalLink className="ml-1.5 size-3.5" />
-              </Button>
-            )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleShare}
+                  className="h-10 px-3 text-xs shrink-0"
+                >
+                  <Share2 className="mr-1.5 size-3.5" />
+                  Share
+                </Button>
+
+                <Button
+                  asChild
+                  variant="outline"
+                  className="h-10 px-3 text-xs shrink-0"
+                >
+                  <Link to="/b/$payload" params={{ payload: basketPayload }}>
+                    <span>Open</span>
+                    <ExternalLink className="ml-1.5 size-3.5" />
+                  </Link>
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
+      ) : (
+        <div className="mt-6 rounded-xl border border-border/60 bg-elevated/50 p-4 text-center">
+          <p className="text-xs text-muted-foreground">
+            {totalWeight !== 100
+              ? `Set stock weights to sum to exactly 100% (currently ${totalWeight}%) to generate your shareable link.`
+              : "Select between 2 and 10 stocks to generate your shareable link."}
+          </p>
+        </div>
+      )}
 
-        <p className="mt-3 text-[11px] text-muted-foreground">
-          Shared index links contain official B20 contract addresses. Buyers connect a wallet and execute swaps via Aerodrome Slipstream.
-        </p>
-      </div>
+      <p className="mt-4 text-[11px] text-muted-foreground">
+        Shared basket links contain verified B20 contract addresses. Buyers approve trades directly in their wallet on Base.
+      </p>
     </div>
   );
 };
+

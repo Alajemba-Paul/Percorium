@@ -409,12 +409,16 @@ export function BasketView({ payload }: { payload: string }) {
 
   const handleCopyLink = async () => {
     try {
-      await navigator.clipboard.writeText(shareableUrl);
-      setCopied(true);
-      toast.success("Basket link copied to clipboard!");
-      setTimeout(() => setCopied(false), 2500);
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareableUrl);
+        setCopied(true);
+        toast.success("Link copied.");
+        setTimeout(() => setCopied(false), 2500);
+        return;
+      }
+      throw new Error("Clipboard API unavailable");
     } catch {
-      toast.error("Failed to copy link.");
+      toast.info("Copy the link from your browser address bar.");
     }
   };
 
