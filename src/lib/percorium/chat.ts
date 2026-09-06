@@ -1,3 +1,5 @@
+import { sanitizeChatMessage } from "./security";
+
 export type ChatMessage = {
   id: string;
   room: string;
@@ -6,6 +8,7 @@ export type ChatMessage = {
   at: number;
   holding: number;
 };
+
 
 const KEY = "percorium-chat-v1";
 
@@ -62,15 +65,15 @@ export function postMessage(input: {
   text: string;
   holding: number;
 }): ChatMessage | { error: string } {
-  const text = input.text.trim().slice(0, 500);
-  if (!text) return { error: "Empty message" };
+  const text = sanitizeChatMessage(input.text);
+  if (!text) return { error: "Empty or invalid message" };
   if (input.holding <= 0) return { error: "Holders only" };
   const store = read();
   const list = store[input.room] ?? seed(input.room);
   const msg: ChatMessage = {
     id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-    room: input.room,
-    from: input.from,
+    room: input.room.slice(0, 32),
+    from: input.from.slice(0, 42),
     text,
     at: Date.now(),
     holding: input.holding,
@@ -79,3 +82,4 @@ export function postMessage(input: {
   write(store);
   return msg;
 }
+

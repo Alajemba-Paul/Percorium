@@ -22,7 +22,7 @@ export const Route = createRootRoute({
       {
         name: "description",
         content:
-          "Base neobrokerage for official Coinbase Tokenized Stocks. Buy, swap, compose backed indices, lend, and talk with holders.",
+          "Trade official Coinbase stocks on Base. Buy, swap, build stock baskets, borrow, and chat with verified holders.",
       },
       { name: "theme-color", content: "#0a0b09" },
     ],

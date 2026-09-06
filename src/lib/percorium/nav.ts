@@ -18,6 +18,15 @@ export function normalizeWeights(weights: WeightMap): Record<StockSymbol, number
   return out;
 }
 
+export function normalizeWeightsList(weights: WeightMap): { symbol: StockSymbol; pct: number; fraction: number }[] {
+  const norm = normalizeWeights(weights);
+  return (Object.keys(norm) as StockSymbol[]).map((symbol) => ({
+    symbol,
+    pct: Number((norm[symbol] * 100).toFixed(1)),
+    fraction: norm[symbol],
+  }));
+}
+
 export function weightBps(weights: WeightMap): Record<StockSymbol, number> {
   const n = normalizeWeights(weights);
   const out = {} as Record<StockSymbol, number>;

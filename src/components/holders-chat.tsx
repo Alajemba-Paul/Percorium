@@ -1,14 +1,13 @@
-import { MessageSquareLock, Send } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { MessageSquareLock, Send, Lock } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useAccount } from "wagmi";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { listMessages, postMessage, type ChatMessage } from "@/lib/percorium/chat";
 import { fetchBalance } from "@/lib/percorium/prices";
-import { useDemoStore } from "@/lib/percorium/demo-store";
 import { formatRelative, shortAddress } from "@/lib/percorium/format";
-import { Label } from "@/components/ui/label";
+import { useStockBalances } from "@/hooks/use-balances";
+import type { StockSymbol } from "@/lib/percorium/constants";
 
 export function HoldersChat({
   room,
@@ -20,12 +19,11 @@ export function HoldersChat({
   label: string;
 }) {
   const { address } = useAccount();
-  const { demoHoldings, setDemoHolding } = useDemoStore();
+  const balances = useStockBalances();
   const [onchain, setOnchain] = useState(0);
   const [msgs, setMsgs] = useState<ChatMessage[]>([]);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const demo = demoHoldings[room] ?? 0;
 
   useEffect(() => {
     setMsgs(listMessages(room));
@@ -33,6 +31,11 @@ export function HoldersChat({
 
   useEffect(() => {
     if (!address || asset === "index") return;
+    // If it's a known stock, the balance is already in balances.stocks
+    if (room in balances.stocks) {
+      setOnchain(balances.stocks[room as StockSymbol]?.units ?? 0);
+      return;
+    }
     let cancelled = false;
     fetchBalance({ data: { owner: address, token: asset } })
       .then((b) => {
@@ -44,19 +47,15 @@ export function HoldersChat({
     return () => {
       cancelled = true;
     };
-  }, [address, asset]);
+  }, [address, asset, room, balances.stocks]);
 
-  const holding = Math.max(onchain, demo);
-  const allowed = holding > 0;
-  const from = address ? shortAddress(address) : "demo-wallet";
-
-  const tier = useMemo(() => {
-    if (holding >= 10) return "10+";
-    if (holding >= 1) return "1+";
-    return "0";
-  }, [holding]);
+  const stockBal = room in balances.stocks ? balances.stocks[room as StockSymbol]?.units ?? 0 : 0;
+  const holding = Math.max(stockBal, onchain);
+  const allowed = Boolean(address) && holding > 0;
+  const from = address ? shortAddress(address) : "";
 
   function send() {
+    if (!allowed || !address) return;
     const res = postMessage({ room, from, text, holding });
     if ("error" in res) {
       setError(res.error);
@@ -68,38 +67,39 @@ export function HoldersChat({
   }
 
   return (
-    <section className="rounded-xl bg-card p-5 shadow-border">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <section className="rounded-xl bg-[#131511] border border-[#262923] p-5 shadow-sm">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[#262923] pb-3">
         <div>
-          <h2 className="font-display text-xl">Holders chat</h2>
-          <p className="text-sm text-muted-foreground">
-            {label} · gate is onchain balanceOf {">"} 0
+          <h2 className="font-['Instrument_Serif',serif] text-xl text-[#f1f0e8]">Holders Chat</h2>
+          <p className="text-xs text-[#8f9388] font-['IBM_Plex_Mono',monospace]">
+            {label} &middot; Only open to holders of {room} on Base.
           </p>
         </div>
-        <span className="font-mono text-[11px] text-muted-foreground">
-          {allowed ? `tier ${tier}` : "locked"}
-        </span>
-      </div>
-
-      <div className="mb-4 flex items-center justify-between gap-3 rounded-lg bg-elevated px-3 py-2">
-        <Label htmlFor={`demo-${room}`} className="text-xs">
-          Simulate holding for demo
-        </Label>
-        <Switch
-          id={`demo-${room}`}
-          checked={demo > 0}
-          onCheckedChange={(v) => setDemoHolding(room, v ? 1.25 : 0)}
-        />
+        <div className="flex items-center gap-2">
+          {allowed ? (
+            <span className="rounded bg-[#6f9a72]/15 border border-[#6f9a72]/30 px-2 py-0.5 font-['IBM_Plex_Mono',monospace] text-[11px] text-[#6f9a72] font-semibold">
+              Verified Holder &middot; {holding.toFixed(2)} {room}
+            </span>
+          ) : (
+            <span className="rounded bg-[#262923] px-2 py-0.5 font-['IBM_Plex_Mono',monospace] text-[11px] text-[#8f9388] flex items-center gap-1">
+              <Lock className="w-3 h-3" />
+              <span>Holders Only</span>
+            </span>
+          )}
+        </div>
       </div>
 
       {!allowed ? (
-        <div className="flex flex-col items-start gap-3 rounded-lg bg-elevated p-4">
-          <MessageSquareLock className="size-5 text-muted-foreground" />
+        <div className="flex flex-col items-start gap-3 rounded-lg bg-[#1a1d18] border border-[#262923] p-5">
+          <MessageSquareLock className="size-5 text-[#cfd8c6]" />
           <div>
-            <p className="text-sm font-medium">Holders only</p>
-            <p className="mt-1 text-sm text-pretty text-muted-foreground">
-              Zero balance. Access dropped. Buy this name (or mint the index)
-              to enter the room. No public lurkers.
+            <p className="text-sm font-semibold text-[#f1f0e8]">
+              {address ? `No ${room} in wallet` : "Wallet not connected"}
+            </p>
+            <p className="mt-1 text-xs text-[#8f9388] leading-relaxed">
+              {address
+                ? `Your wallet (${shortAddress(address)}) holds no ${room} on Base. Buy shares on the Spot Desk to join this chat.`
+                : `Connect your Base wallet holding ${room} to join the chat.`}
             </p>
           </div>
         </div>
@@ -120,7 +120,7 @@ export function HoldersChat({
             <Textarea
               rows={2}
               value={text}
-              placeholder="Message holders"
+              placeholder="Write a message..."
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send();
@@ -129,7 +129,7 @@ export function HoldersChat({
             {error ? <p className="text-xs text-destructive">{error}</p> : null}
             <Button onClick={send} className="self-end">
               <Send className="size-4" />
-              Send
+              Send Message
             </Button>
           </div>
         </>

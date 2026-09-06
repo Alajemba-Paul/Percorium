@@ -15,7 +15,7 @@ export function LendPanel({
   assetAddress,
   isIndex,
   nav,
-  shares,
+  shares: _shares,
 }: {
   symbol: string;
   assetAddress: string;
@@ -65,28 +65,27 @@ export function LendPanel({
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Landmark className="size-4 text-muted-foreground" />
-          <h2 className="font-display text-xl">Credit</h2>
+          <h2 className="font-display text-xl">Borrow</h2>
         </div>
         {market ? (
-          <Badge variant="live">Morpho market</Badge>
+          <Badge variant="live">Loan pool open</Badge>
         ) : (
-          <Badge variant="outline">No market yet</Badge>
+          <Badge variant="outline">No loan pool yet</Badge>
         )}
       </div>
 
       {market ? (
         <dl className="mb-4 grid grid-cols-2 gap-3 text-sm">
-          <Stat k="Supply APY" v={formatPct(market.supplyApy)} />
-          <Stat k="Borrow APY" v={formatPct(market.borrowApy)} />
-          <Stat k="LLTV" v={formatPct(market.lltv, 0)} />
-          <Stat k="Liquidity" v={formatUsd(market.liquidity, 0)} />
+          <Stat k="Supply Rate" v={formatPct(market.supplyApy)} />
+          <Stat k="Borrow Rate" v={formatPct(market.borrowApy)} />
+          <Stat k="Max Loan" v={formatPct(market.lltv, 0)} />
+          <Stat k="Pool Funds" v={formatUsd(market.liquidity, 0)} />
         </dl>
       ) : (
         <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
-          No isolated Morpho Blue market for{" "}
+          No loan market exists yet for{" "}
           {isIndex ? symbol : STOCK_BY_SYMBOL[symbol as StockSymbol]?.company}{" "}
-          as collateral yet. Spot, index inclusion, and holders chat still work.
-          Isolated borrow vs this asset is hidden until a market exists.
+          as collateral. You can still trade this stock, add it to baskets, and join the holders chat.
         </p>
       )}
 
@@ -111,12 +110,12 @@ export function LendPanel({
 
       <dl className="mt-4 space-y-2 rounded-lg bg-elevated p-3 text-sm">
         <Stat
-          k="Health factor"
+          k="Loan health"
           v={Number.isFinite(sim.hf) ? sim.hf.toFixed(2) : "∞"}
         />
-        <Stat k="Liq. NAV / price" v={formatUsd(sim.liq)} />
+        <Stat k="Liquidation price" v={formatUsd(sim.liq)} />
         <Stat
-          k="Max LTV"
+          k="Max loan limit"
           v={formatPct(
             market ? market.lltv : DEFAULT_INDEX_LTV_BPS / 10_000,
             0,
@@ -126,13 +125,13 @@ export function LendPanel({
 
       <div className="mt-4 grid grid-cols-2 gap-2">
         <Button variant="secondary" disabled={!market || locked}>
-          Supply
+          Supply Asset
         </Button>
         <Button disabled={!market || locked}>Borrow USDC</Button>
       </div>
       <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-        Isolated only. No protocol-wide cross-margin. No house-backed perps.
-        {locked ? " Ticket is fail-closed until eligibility, sequencer, and feed clear." : ""}
+        Each loan market is isolated.
+        {locked ? " Borrowing is blocked until location, network, and price feeds clear." : ""}
       </p>
     </div>
   );

@@ -9,12 +9,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { shortAddress } from "@/lib/percorium/format";
+import { shortAddress, formatNum } from "@/lib/percorium/format";
+import { useStockBalances } from "@/hooks/use-balances";
 
 export function WalletButton() {
   const { address, isConnected, connector } = useAccount();
   const { connectors, connect, isPending } = useConnect();
   const { disconnect } = useDisconnect();
+  const balances = useStockBalances();
 
   if (isConnected && address) {
     return (
@@ -27,8 +29,11 @@ export function WalletButton() {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuLabel>
-            {connector?.name ?? "Wallet"} · Base
+          <DropdownMenuLabel className="space-y-0.5">
+            <div>{connector?.name ?? "Wallet"} · Base</div>
+            <div className="font-mono text-xs text-muted-foreground font-normal">
+              {formatNum(balances.usdc.units, 2)} USDC
+            </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => disconnect()}>

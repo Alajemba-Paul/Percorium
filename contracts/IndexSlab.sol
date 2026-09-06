@@ -43,13 +43,24 @@ contract IndexSlab {
     uint256 public constant WAD = 1e18;
     uint256 public constant HEARTBEAT = 36 hours;
 
+    bool private _locked;
+
     error NotFactory();
     error BadWeights();
     error StaleFeed();
     error ZeroAmount();
     error InsufficientShares();
+    error Reentrancy();
+
+    modifier nonReentrant() {
+        if (_locked) revert Reentrancy();
+        _locked = true;
+        _;
+        _locked = false;
+    }
 
     event Transfer(address indexed from, address indexed to, uint256 value);
+
     event Approval(address indexed owner, address indexed spender, uint256 value);
     event Minted(address indexed user, uint256 usdcIn, uint256 shares);
     event Redeemed(address indexed user, uint256 shares, bool asUsdc);
@@ -119,20 +130,31 @@ contract IndexSlab {
         return uint256(answer) / 100;
     }
 
-    function mintWithUSDC(uint256 amount) external returns (uint256 shares) {
+    function mintWithUSDC(uint256 amount) external nonReentrant returns (uint256 shares) {
         if (amount == 0) revert ZeroAmount();
-        IERC20(usdc).transferFrom(msg.sender, address(this), amount);
         uint256 fee = (amount * feeBps) / 10_000;
         uint256 royalty = (fee * creatorRoyaltyBps) / 10_000;
-        if (royalty > 0) IERC20(usdc).transfer(creator, royalty);
         uint256 net = amount - fee;
         uint256 n = nav();
         shares = (net * 1e18) / n;
+        if (shares == 0) revert ZeroAmount();
+
+        IERC20(usdc).transferFrom(msg.sender, address(this), amount);
+        if (royalty > 0) IERC20(usdc).transfer(creator, royalty);
+
+        // Anti-inflation protection: on initial deposit, burn 1000 dead shares
+        if (totalSupply == 0) {
+            uint256 dead = 1000;
+            if (shares <= dead) revert ZeroAmount();
+            _mint(address(0x000000000000000000000000000000000000dEaD), dead);
+            shares -= dead;
+        }
+
         _mint(msg.sender, shares);
         emit Minted(msg.sender, amount, shares);
     }
 
-    function redeem(uint256 shares, bool asUsdc) external {
+    function redeem(uint256 shares, bool asUsdc) external nonReentrant {
         if (shares == 0 || shares > balanceOf[msg.sender]) revert InsufficientShares();
         uint256 supply = totalSupply;
         _burn(msg.sender, shares);
@@ -161,6 +183,7 @@ contract IndexSlab {
         }
         emit Redeemed(msg.sender, shares, asUsdc);
     }
+
 
     function _mint(address to, uint256 amount) internal {
         totalSupply += amount;

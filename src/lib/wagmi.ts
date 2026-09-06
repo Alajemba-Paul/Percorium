@@ -1,23 +1,21 @@
-import { createConfig, http } from "wagmi";
+import { createConfig, fallback, http } from "wagmi";
 import { base } from "wagmi/chains";
 import { coinbaseWallet, injected } from "wagmi/connectors";
 import { BASE_RPC_FALLBACKS } from "@/lib/percorium/constants";
 
-const rpc =
-  (typeof process !== "undefined" && process.env.BASE_RPC) ||
-  BASE_RPC_FALLBACKS[0];
-
 export const wagmiConfig = createConfig({
   chains: [base],
   connectors: [
-    injected({ shimDisconnect: true }),
+    injected(),
     coinbaseWallet({
       appName: "Percorium",
-      preference: "all",
+      preference: { options: "all" },
     }),
   ],
   transports: {
-    [base.id]: http(rpc),
+    [base.id]: fallback(
+      BASE_RPC_FALLBACKS.map((url) => http(url, { timeout: 10_000 })),
+    ),
   },
   ssr: true,
 });

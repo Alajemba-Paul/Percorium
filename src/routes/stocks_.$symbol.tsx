@@ -1,9 +1,9 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { ExternalLink } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { HoldersChat } from "@/components/holders-chat";
 import { LendPanel } from "@/components/lend-panel";
+import { OfficialPriceBadge } from "@/components/official-price-badge";
 import { StockChart } from "@/components/StockChart";
 import { StockMark } from "@/components/stock-mark";
 import { TradeTicket } from "@/components/trade-ticket";
@@ -11,7 +11,7 @@ import {
   STOCK_BY_SYMBOL,
   type StockSymbol,
 } from "@/lib/percorium/constants";
-import { formatRelative, formatUsd, shortAddress } from "@/lib/percorium/format";
+import { formatUsd, shortAddress } from "@/lib/percorium/format";
 import { usePriceBoard, quoteMap } from "@/hooks/use-board";
 
 export const Route = createFileRoute("/stocks_/$symbol")({
@@ -42,11 +42,8 @@ function StockPage() {
           <div className="font-display text-4xl tabular-nums tracking-tight">
             {formatUsd(q?.oracle ?? 0)}
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-2 sm:justify-end">
-            {q ? feedBadge(q.status) : null}
-            <span className="text-xs text-muted-foreground">
-              {q?.updatedAt ? formatRelative(q.updatedAt) : "—"}
-            </span>
+          <div className="mt-1 flex flex-col items-start sm:items-end">
+            <OfficialPriceBadge updatedAt={q?.updatedAt} />
           </div>
         </div>
       </div>
@@ -67,7 +64,7 @@ function StockPage() {
           }
         />
         <Meta
-          k="Feed"
+          k="Price Feed"
           v={
             <span className="font-mono text-xs">
               {shortAddress(stock.feed, 4)}
@@ -99,20 +96,13 @@ function StockPage() {
       />
 
       <p className="text-xs text-muted-foreground">
-        Identify this asset by address {stock.address}, not ticker alone.{" "}
+        Identify this stock by contract address {stock.address}, not by ticker alone.{" "}
         <Link to="/" className="underline-offset-2 hover:underline">
           Back to discover
         </Link>
       </p>
     </div>
   );
-}
-
-function feedBadge(status: string) {
-  if (status === "live") return <Badge variant="live">Oracle live</Badge>;
-  if (status === "holding") return <Badge variant="warn">Holding last close</Badge>;
-  if (status === "stale") return <Badge variant="warn">Stale</Badge>;
-  return <Badge variant="danger">Paused</Badge>;
 }
 
 function Meta({ k, v }: { k: string; v: ReactNode }) {

@@ -36,7 +36,9 @@ export type QuoteRequest = {
   buyToken: `0x${string}`;
   sellAmount: string;
   taker?: `0x${string}`;
+  slippageBps?: number;
 };
+
 
 export type QuoteResult = {
   ok: boolean;

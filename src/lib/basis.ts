@@ -31,10 +31,10 @@ export function basisView(opts: {
   sequencer?: SequencerState | null;
 }): BasisView {
   if (oraclePaused(opts) || !opts.chainlinkUsd) {
-    return { bps: null, tone: "paused", label: "oracle paused", signal: false };
+    return { bps: null, tone: "paused", label: "Price feed paused", signal: false };
   }
   if (opts.ammUsd == null || !Number.isFinite(opts.ammUsd)) {
-    return { bps: null, tone: "flat", label: "no AMM", signal: false };
+    return { bps: null, tone: "flat", label: "No exchange pool", signal: false };
   }
   const raw = basisBps(opts.ammUsd, opts.chainlinkUsd);
   if (raw == null) {
@@ -42,10 +42,10 @@ export function basisView(opts: {
   }
   const bps = Math.round(raw);
   if (Math.abs(bps) < 1) {
-    return { bps, tone: "flat", label: "flat", signal: true };
+    return { bps, tone: "flat", label: "Matches official price", signal: true };
   }
   if (bps > 0) {
-    return { bps, tone: "premium", label: `+${bps} bps premium`, signal: true };
+    return { bps, tone: "premium", label: `+${bps} bps above official`, signal: true };
   }
-  return { bps, tone: "discount", label: `${bps} bps discount`, signal: true };
+  return { bps, tone: "discount", label: `${bps} bps below official`, signal: true };
 }

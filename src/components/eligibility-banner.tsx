@@ -18,12 +18,11 @@ export function EligibilityBanner() {
       <div className="border-b border-border bg-elevated px-4 py-3">
         <div className="mx-auto flex max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-pretty text-muted-foreground">
-            {COMPLIANCE_COPY} Confirm you are not a US person before any
-            swap, mint, or borrow.
+            {COMPLIANCE_COPY} Please confirm you are not in the US before trading or borrowing.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={() => setAcknowledged(true)}>
-              I am not a US person
+              I am outside the US
             </Button>
             <Button
               size="sm"
@@ -45,12 +44,11 @@ export function EligibilityBanner() {
           <ShieldAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
           <div>
             <p className="text-sm font-medium text-foreground">
-              Restricted jurisdiction
+              Not available in your country
               {country ? ` · ${country}` : ""}
             </p>
             <p className="text-sm text-pretty text-muted-foreground">
-              {COMPLIANCE_COPY} Discover is open. Buy, sell, swap, mint, and
-              borrow are disabled.
+              {COMPLIANCE_COPY} You can view stock prices. Trading, minting, and borrowing are blocked.
             </p>
           </div>
         </div>
@@ -63,7 +61,7 @@ export function EligibilityBanner() {
               setAcknowledged(false);
             }}
           >
-            Reset gate
+            Reset location
           </Button>
         ) : null}
       </div>
@@ -79,7 +77,7 @@ export function EligibilityChip() {
     return (
       <span className="hidden items-center gap-1.5 text-xs text-warn sm:inline-flex">
         <ShieldAlert className="size-3.5" />
-        Confirm eligibility
+        Confirm location
       </span>
     );
   }

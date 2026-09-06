@@ -2,22 +2,19 @@ import { createServerFn } from "@tanstack/react-start";
 import { AGGREGATOR_V3_ABI, B20_ABI } from "./abis";
 import {
   CHAINLINK_SEQUENCER_UPTIME,
-  FEED_PAUSE_SEC,
-  FEED_STALE_SEC,
   SEQUENCER_GRACE_SEC,
   STOCKS,
   type StockSymbol,
 } from "./constants";
-import { isUsEquitySession } from "./format";
+import { officialPriceBadge } from "./format";
 import { getPublicClient, rpcUrl } from "./rpc";
 import type { FeedStatus, PriceBoard, SequencerState, StockQuote } from "./types";
 
 function statusFor(updatedAt: number): FeedStatus {
-  const age = Date.now() / 1000 - updatedAt;
-  const session = isUsEquitySession();
-  if (age > FEED_PAUSE_SEC) return "paused";
-  if (age > FEED_STALE_SEC && session.weekday) return "stale";
-  if (!session.weekday || age > FEED_STALE_SEC) return "holding";
+  if (!updatedAt || updatedAt === 0) return "paused";
+  const badge = officialPriceBadge(updatedAt);
+  if (badge.tone === "warn") return "holding";
+  if (badge.tone === "danger") return "stale";
   return "live";
 }
 

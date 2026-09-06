@@ -58,6 +58,53 @@ export function formatRelative(unixSec: number): string {
   return `${Math.floor(delta / 86400)}d ago`;
 }
 
+export function nyNow(d = new Date()) {
+  return new Date(d.toLocaleString("en-US", { timeZone: "America/New_York" }));
+}
+
+export function isUsCashClosed(d = new Date()) {
+  const ny = nyNow(d);
+  const day = ny.getDay(); // 0 Sun … 6 Sat
+  const mins = ny.getHours() * 60 + ny.getMinutes();
+  if (day === 0 || day === 6) return true;
+  if (day === 5 && mins >= 16 * 60) return true; // Fri after 16:00
+  if (day === 1 && mins < 9 * 60 + 30) return true; // Mon before 9:30
+  return false;
+}
+
+export type OfficialPriceBadgeResult = {
+  tone: "warn" | "danger" | "ok";
+  label: string;
+  subtext?: string;
+  blockTrade: boolean;
+};
+
+export function officialPriceBadge(updatedAtSec: number): OfficialPriceBadgeResult {
+  const ageH = (Date.now() / 1000 - updatedAtSec) / 3600;
+  if (isUsCashClosed()) {
+    return {
+      tone: "warn",
+      label: "Markets closed — showing last Friday official close",
+      subtext: "Onchain price can still move. Official price updates when the US stock market opens.",
+      blockTrade: false, // still allow DEX swap if you want weekend trading
+    };
+  }
+  if (ageH > 2) {
+    return {
+      tone: "danger",
+      label: "Official price delayed. Buying is paused.",
+      subtext: undefined,
+      blockTrade: true,
+    };
+  }
+  return {
+    tone: "ok",
+    label: "Official price",
+    subtext: undefined,
+    blockTrade: false,
+  };
+}
+
 export function isUsEquitySession(now = new Date()): {
   weekday: boolean;
   sessionOpen: boolean;
@@ -78,8 +125,8 @@ export function isUsEquitySession(now = new Date()): {
   const minute = Number(parts.minute);
   const mins = hour * 60 + minute;
   const sessionOpen = weekday && mins >= 9 * 60 + 30 && mins < 16 * 60;
-  const label = !weekday
-    ? "Weekend — holding last close"
+  const label = isUsCashClosed(now)
+    ? "Markets closed — showing last Friday official close"
     : sessionOpen
       ? "Cash session open"
       : "Overnight — 24/5 feed";

@@ -238,9 +238,9 @@ export const ALLOWED_TRADE_TOKENS = new Set<string>([
 
 export const BASE_RPC_FALLBACKS = [
   "https://mainnet.base.org",
-  "https://base.llamarpc.com",
+  "https://base-rpc.publicnode.com",
+  "https://developer-access-mainnet.base.org",
   "https://base.drpc.org",
-  "https://1rpc.io/base",
 ] as const;
 
 export const RESTRICTED_COUNTRIES = new Set([
@@ -259,4 +259,4 @@ export const RESTRICTED_COUNTRIES = new Set([
 ]);
 
 export const COMPLIANCE_COPY =
-  "Coinbase Tokenized Stocks are only available to eligible persons outside the US.";
+  "Coinbase tokenized stocks are only available to users outside the US.";

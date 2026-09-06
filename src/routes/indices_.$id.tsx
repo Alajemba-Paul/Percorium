@@ -32,7 +32,10 @@ function IndexPage() {
   const [usdc, setUsdc] = useState("1000");
   const [shares, setShares] = useState("10");
   const [asUsdc, setAsUsdc] = useState(true);
-  const found = useMemo(() => getSlab(id), [id, rev]);
+  const found = useMemo(() => {
+    void rev;
+    return getSlab(id);
+  }, [id, rev]);
   const board = usePriceBoard();
   const { restricted } = useEligibility();
   const quotes = quoteMap(board.data?.stocks);
@@ -63,7 +66,7 @@ function IndexPage() {
 
   function mint() {
     if (locked) {
-      toast.error("Mint is fail-closed.");
+      toast.error("Minting is blocked.");
       return;
     }
     mintSlab(slab.id, gross, prices);
@@ -73,12 +76,12 @@ function IndexPage() {
 
   function redeem() {
     if (locked) {
-      toast.error("Redeem is fail-closed.");
+      toast.error("Redemption is blocked.");
       return;
     }
     redeemSlab(slab.id, Number(shares) || 0, asUsdc, prices);
     setRev((n) => n + 1);
-    toast.success("Redeemed");
+    toast.success("Redeemed shares");
   }
 
   return (
@@ -86,29 +89,29 @@ function IndexPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-            Isolated slab
+            Stock Basket
           </p>
           <h1 className="font-display text-4xl tracking-tight">{slab.name}</h1>
           <p className="text-muted-foreground">
-            {slab.symbol} · creator {slab.creator}
+            {slab.symbol} · Creator: {slab.creator}
           </p>
         </div>
         <div className="text-left sm:text-right">
           <div className="font-display text-4xl tabular-nums">{formatUsd(nav)}</div>
-          <div className="text-xs text-muted-foreground">NAV · target 1.00 at T0</div>
+          <div className="text-xs text-muted-foreground">Basket value · Starts at 1.00 USDC</div>
         </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Stat k="Supply" v={formatNum(slab.supply, 4)} />
+        <Stat k="Total Supply" v={formatNum(slab.supply, 4)} />
         <Stat k="Fee" v={`${slab.feeBps / 100}%`} />
-        <Stat k="Max LTV" v={`${slab.maxLtvBps / 100}%`} />
+        <Stat k="Max Loan" v={`${slab.maxLtvBps / 100}%`} />
       </div>
 
       <IndexNavCard />
 
       <section className="rounded-xl bg-card p-5 shadow-border">
-        <h2 className="font-display text-xl">Weights</h2>
+        <h2 className="font-display text-xl">Stock Weights</h2>
         <ul className="mt-4 space-y-3">
           {(Object.keys(weights) as StockSymbol[]).map((sym) => {
             const meta = STOCK_BY_SYMBOL[sym];
@@ -142,9 +145,9 @@ function IndexPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-xl bg-card p-5 shadow-border">
-          <h2 className="font-display text-xl">Mint with USDC</h2>
+          <h2 className="font-display text-xl">Deposit USDC</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Swaps into target weights, then mints shares = USDC_net / NAV.
+            Buys the underlying stocks and mints basket shares.
           </p>
           <Label className="mt-4 block">USDC</Label>
           <Input
@@ -163,15 +166,15 @@ function IndexPage() {
             ))}
           </ul>
           <p className="mt-3 text-sm text-muted-foreground">
-            Fee {formatUsd(fee)} · shares {mintShares.toFixed(4)}
+            Fee {formatUsd(fee)} · Estimated shares {mintShares.toFixed(4)}
           </p>
           <Button className="mt-4 w-full" disabled={locked} onClick={mint}>
-            Mint
+            Deposit &amp; Mint
           </Button>
         </div>
 
         <div className="rounded-xl bg-card p-5 shadow-border">
-          <h2 className="font-display text-xl">Redeem</h2>
+          <h2 className="font-display text-xl">Redeem Shares</h2>
           <Label className="mt-4 block">Shares</Label>
           <Input
             className="mt-1.5 font-mono tabular-nums"
@@ -184,8 +187,8 @@ function IndexPage() {
             onValueChange={(v) => setAsUsdc(v === "usdc")}
           >
             <TabsList className="w-full">
-              <TabsTrigger value="usdc">As USDC</TabsTrigger>
-              <TabsTrigger value="basket">As basket</TabsTrigger>
+              <TabsTrigger value="usdc">Receive USDC</TabsTrigger>
+              <TabsTrigger value="basket">Receive Stocks</TabsTrigger>
             </TabsList>
           </Tabs>
           <Button
@@ -194,7 +197,7 @@ function IndexPage() {
             disabled={locked}
             onClick={redeem}
           >
-            Redeem
+            Redeem Shares
           </Button>
         </div>
       </div>

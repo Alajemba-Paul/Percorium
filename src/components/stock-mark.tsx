@@ -3,9 +3,11 @@ import { cn } from "@/lib/utils";
 export function StockMark({
   symbol,
   size = "md",
+  className,
 }: {
   symbol: string;
   size?: "sm" | "md" | "lg";
+  className?: string;
 }) {
   const letter = symbol.replace(/c$/, "").slice(0, 1);
   return (
@@ -15,6 +17,7 @@ export function StockMark({
         size === "sm" && "size-8 text-base",
         size === "md" && "size-10 text-lg",
         size === "lg" && "size-14 text-2xl",
+        className,
       )}
       aria-hidden
     >

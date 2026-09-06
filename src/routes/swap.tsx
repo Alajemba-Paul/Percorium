@@ -23,8 +23,7 @@ function SwapPage() {
       <div>
         <h1 className="font-display text-4xl tracking-tight">Swap</h1>
         <p className="mt-2 text-pretty text-muted-foreground">
-          Buy, sell, or stock-to-stock through 0x, with 1inch as fallback.
-          Non-allowlisted tokens are rejected.
+          Buy, sell, or trade stocks on Base. Only stocks on the official list are supported.
         </p>
       </div>
       <Select value={symbol} onValueChange={(v) => setSymbol(v as StockSymbol)}>

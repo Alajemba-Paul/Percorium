@@ -57,7 +57,7 @@ function CreateIndex() {
 
   function create() {
     if (restricted) {
-      toast.error("Minting is disabled for restricted jurisdictions.");
+      toast.error("Basket creation is not available in your country.");
       return;
     }
     const slab = createSlab({
@@ -66,24 +66,22 @@ function CreateIndex() {
       creator: address ?? "workshop",
       weights,
     });
-    toast.success(`${slab.symbol} slab created`);
+    toast.success(`${slab.symbol} basket created`);
     nav({ to: "/indices/$id", params: { id: slab.id } });
   }
 
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       <div>
-        <h1 className="font-display text-4xl tracking-tight">New index</h1>
+        <h1 className="font-display text-4xl tracking-tight">Create Stock Basket</h1>
         <p className="mt-2 text-pretty text-muted-foreground">
-          2–10 official Coinbase names. Weights rebalance to 100%. Launch NAV
-          is 1.00 USDC. Factory source is in the repo; this workshop tracks the
-          slab locally until deploy.
+          Choose 2 to 10 official Coinbase stocks. Weights must total 100%. Starting value is 1.00 USDC.
         </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <Label>Name</Label>
+          <Label>Basket Name</Label>
           <Input
             className="mt-1.5"
             value={name}
@@ -91,7 +89,7 @@ function CreateIndex() {
           />
         </div>
         <div>
-          <Label>Symbol</Label>
+          <Label>Ticker Symbol</Label>
           <Input
             className="mt-1.5 font-mono uppercase"
             value={symbol}
@@ -101,7 +99,7 @@ function CreateIndex() {
       </div>
 
       <div>
-        <Label>Constituents</Label>
+        <Label>Select Stocks</Label>
         <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
           {STOCKS.map((s) => {
             const on = selected.includes(s.symbol);
@@ -149,7 +147,7 @@ function CreateIndex() {
       </div>
 
       <Button className="w-full" disabled={!valid || restricted} onClick={create}>
-        Launch at 1.00 USDC NAV
+        Create Basket at 1.00 USDC
       </Button>
     </div>
   );

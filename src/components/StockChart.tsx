@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 
 const TF_KEY = "percorium.chart.tf";
 const CHART_CAPTION =
-  "Onchain price is the Aerodrome/DEX mid. Chainlink is the 24/5 official reference used for NAV and LTV. Weekend prints can gap.";
+  "DEX price is from decentralized exchange pools. Chainlink provides the official price during market hours. Prices may show a gap on weekends.";
 
 export const TIMEFRAMES = [
   { id: "5m", gecko: "5m", dex: "5", label: "5m" },
@@ -204,8 +204,8 @@ export function StockChart({
   if (!official) {
     return (
       <EmptyChart
-        title="Not a Coinbase Tokenized Stock"
-        body="Percorium only charts official B20 addresses. Lookalikes are dropped — no embed."
+        title="Not an official Coinbase stock"
+        body="Percorium only shows charts for official Coinbase stock addresses on Base."
       />
     );
   }
@@ -228,8 +228,8 @@ export function StockChart({
   if (!pair) {
     return (
       <EmptyChart
-        title="No official USDC pool yet — trading disabled"
-        body="No Aerodrome/DEX USDC pair was found for this Coinbase stock. Percorium will not embed a random pair."
+        title="No exchange pool found"
+        body="No USDC pool was found for this stock. Trading is disabled until an official pool is available."
       />
     );
   }
@@ -252,10 +252,10 @@ export function StockChart({
             </a>
           </div>
           <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
-            <Stat k="AMM" v={formatUsd(pair.priceUsd)} />
-            <Stat k="Chainlink" v={formatUsd(quote?.oracle ?? 0)} />
-            <Stat k="24h vol" v={formatCompactUsd(pair.volume24h)} />
-            <Stat k="Liquidity" v={formatCompactUsd(pair.liquidityUsd)} />
+            <Stat k="DEX Price" v={formatUsd(pair.priceUsd)} />
+            <Stat k="Official Price" v={formatUsd(quote?.oracle ?? 0)} />
+            <Stat k="24h Volume" v={formatCompactUsd(pair.volume24h)} />
+            <Stat k="Pool Funds" v={formatCompactUsd(pair.liquidityUsd)} />
           </dl>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <BasisChip tone={basis.tone} label={basis.label} />
@@ -353,11 +353,9 @@ function EmptyChart({ title, body }: { title: string; body: string }) {
 export function IndexNavCard() {
   return (
     <section className="rounded-xl bg-card p-5 shadow-border">
-      <h2 className="font-display text-xl tracking-tight">Index NAV is not a DEX pair</h2>
+      <h2 className="font-display text-xl tracking-tight">Basket value is not a DEX pair</h2>
       <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-        This slab is priced from Chainlink total-return feeds on the
-        constituents plus USDC cash. Percorium will not embed a random
-        Aerodrome chart as if it were the index.
+        This basket is priced from official Chainlink feeds for each stock plus USDC cash. Percorium does not use random exchange pools to price baskets.
       </p>
       <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
         {CHART_CAPTION}

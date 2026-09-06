@@ -2,5 +2,28 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "buildCommand": "npm run build",
-  "installCommand": "npm install"
+  "installCommand": "npm install",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://grok.com https://dexscreener.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://dexscreener.com https://*.dexscreener.com https://dd.dexscreener.com https://basescan.org https://og.grok.me https://tokens.1inch.io; connect-src 'self' https://api.0x.org https://gas.api.0x.org https://*.0x.org https://dexscreener.com https://api.dexscreener.com https://*.dexscreener.com https://mainnet.base.org https://*.base.org wss://mainnet.base.org wss://*.base.org https://base-rpc.publicnode.com https://developer-access-mainnet.base.org https://base.drpc.org https://api.1inch.com https://api.morpho.org https://*.coinbase.com wss://*.coinbase.com; frame-src 'self' https://dexscreener.com https://*.dexscreener.com https://www.geckoterminal.com; frame-ancestors 'self' https://ai.studio https://*.google.com https://*.run.app https://*.grok.me https://*.grok-sandbox.com; media-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=()"
+        }
+      ]
+    }
+  ]
 }
