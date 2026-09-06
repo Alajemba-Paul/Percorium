@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   Check,
@@ -8,6 +8,7 @@ import {
   Plus,
   Share2,
   SlidersHorizontal,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -21,24 +22,29 @@ import {
   type StockSymbol,
 } from "@/lib/percorium/constants";
 import { encodeBasketPayload } from "@/lib/percorium/basket";
+import { PRESET_INDICES, type PresetBasket } from "@/lib/percorium/presets";
 import { formatNum } from "@/lib/percorium/format";
 import { usePriceBoard, quoteMap } from "@/hooks/use-board";
+import { StockMark } from "@/components/stock-mark";
 
 interface BasketBuilderProps {
   initialSpendUsdc?: string;
   initialName?: string;
   initialStocks?: { symbol: StockSymbol; weight: number }[];
+  selectedPreset?: PresetBasket | null;
   onBasketCreated?: (payload: string) => void;
 }
 
 export const BasketBuilder: React.FC<BasketBuilderProps> = ({
   initialSpendUsdc = "250",
-  initialName = "Big Tech Leaders",
+  initialName = "Big Tech Titans",
   initialStocks = [
-    { symbol: "NVDAc", weight: 40 },
-    { symbol: "MSFTc", weight: 35 },
     { symbol: "AAPLc", weight: 25 },
+    { symbol: "MSFTc", weight: 25 },
+    { symbol: "NVDAc", weight: 25 },
+    { symbol: "GOOGLc", weight: 25 },
   ],
+  selectedPreset,
 }) => {
   const [name, setName] = useState(initialName);
   const [spendUsdc, setSpendUsdc] = useState(initialSpendUsdc);
@@ -51,6 +57,18 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
   const [copied, setCopied] = useState(false);
   const urlInputRef = useRef<HTMLInputElement>(null);
 
+  // Sync when an external preset is selected
+  useEffect(() => {
+    if (selectedPreset) {
+      setName(selectedPreset.name);
+      setSpendUsdc(selectedPreset.defaultSpendUsdc.toString());
+      setSelectedStocks(selectedPreset.legs.map((l) => l.symbol));
+      setWeights(
+        Object.fromEntries(selectedPreset.legs.map((l) => [l.symbol, l.weight])),
+      );
+    }
+  }, [selectedPreset]);
+
   const board = usePriceBoard();
   const quotes = useMemo(
     () => quoteMap(board.data?.stocks),
@@ -58,7 +76,7 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
   );
 
   const cleanName = useMemo(() => {
-    return name.replace(/<[^>]*>?/gm, "").trim().slice(0, 40) || "Shareable Basket";
+    return name.replace(/<[^>]*>?/gm, "").trim().slice(0, 40) || "Custom Stock Basket";
   }, [name]);
 
   const spendNum = useMemo(() => {
@@ -99,6 +117,16 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
         : "https://percorium.app";
     return `${origin}/b/${basketPayload}`;
   }, [basketPayload]);
+
+  const handleApplyPreset = (preset: PresetBasket) => {
+    setName(preset.name);
+    setSpendUsdc(preset.defaultSpendUsdc.toString());
+    setSelectedStocks(preset.legs.map((l) => l.symbol));
+    setWeights(
+      Object.fromEntries(preset.legs.map((l) => [l.symbol, l.weight])),
+    );
+    toast.success(`Loaded "${preset.name}" preset.`);
+  };
 
   const handleDistributeEqually = () => {
     if (selectedStocks.length === 0) return;
@@ -214,19 +242,21 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
   }, [selectedStocks]);
 
   return (
-    <div className="rounded-xl bg-card p-5 sm:p-6 shadow-border">
-      <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <div id="custom-curation-builder" className="rounded-xl bg-card p-5 sm:p-6 shadow-border">
+      {/* Header */}
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
             <Coins className="size-5 text-primary" />
             <h2 className="font-display text-2xl tracking-tight">
-              Create Shareable Basket
+              Custom Basket Curation
             </h2>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            Bundle official Coinbase B20 stocks into a shareable link. No token minting or sign-in required.
+            Curate your own custom basket of 2–10 official Coinbase B20 stocks. Set exact percentage weights and generate a verified link.
           </p>
         </div>
+
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
@@ -235,8 +265,38 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
             className="text-xs"
           >
             <SlidersHorizontal className="mr-1.5 size-3.5" />
-            Equal Weights
+            Equalize Weights
           </Button>
+        </div>
+      </div>
+
+      {/* Preset Quick Loader Bar */}
+      <div className="mb-6 rounded-lg bg-elevated/70 p-3 border border-border/60">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+            <Sparkles className="size-3 text-primary" />
+            Load from Preset Template
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {PRESET_INDICES.map((p) => {
+            const isCurrent = name === p.name;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => handleApplyPreset(p)}
+                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition cursor-pointer border ${
+                  isCurrent
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-card text-foreground hover:bg-card/80 border-border/70 hover:border-primary/40"
+                }`}
+              >
+                <span>{p.name}</span>
+                <span className="text-[10px] opacity-70">({p.legs.length})</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -255,7 +315,7 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
             <Input
               id="basket-name"
               className="mt-1.5"
-              placeholder="e.g., Big Tech Leaders"
+              placeholder="e.g., Custom Growth Basket"
               maxLength={40}
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -282,17 +342,18 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
           {availableToAdd.length > 0 && selectedStocks.length < 10 && (
             <div>
               <Label className="text-xs font-medium text-muted-foreground">
-                Add Stocks to Basket ({selectedStocks.length}/10)
+                Add Stocks to Basket ({selectedStocks.length}/10 selected)
               </Label>
-              <div className="mt-2 flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
+              <div className="mt-2 flex flex-wrap gap-1.5 max-h-40 overflow-y-auto pr-1">
                 {availableToAdd.map((stock) => (
                   <button
                     key={stock.symbol}
                     type="button"
                     onClick={() => handleAddStock(stock.symbol)}
-                    className="flex items-center gap-1.5 rounded-lg border border-border bg-elevated px-2.5 py-1 text-xs text-foreground transition-colors hover:border-primary/50 hover:bg-card"
+                    className="flex items-center gap-1.5 rounded-lg border border-border bg-elevated px-2.5 py-1 text-xs text-foreground transition-colors hover:border-primary/50 hover:bg-card cursor-pointer"
                   >
                     <Plus className="size-3 text-muted-foreground" />
+                    <StockMark symbol={stock.symbol} size="sm" />
                     <span className="font-mono font-medium">{stock.symbol}</span>
                     <span className="text-[10px] text-muted-foreground">
                       {stock.company}
@@ -330,7 +391,7 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
             </div>
           </div>
 
-          <div className="space-y-2.5 rounded-lg border border-border/70 bg-elevated p-3">
+          <div className="space-y-2.5 rounded-lg border border-border/70 bg-elevated p-3 max-h-[380px] overflow-y-auto">
             {selectedStocks.map((sym) => {
               const stock = STOCK_BY_SYMBOL[sym];
               const w = weights[sym] || 0;
@@ -346,6 +407,7 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
+                      <StockMark symbol={sym} size="sm" />
                       <span className="font-mono text-sm font-semibold text-foreground">
                         {sym}
                       </span>
@@ -377,7 +439,7 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
                       type="button"
                       onClick={() => handleRemoveStock(sym)}
                       disabled={selectedStocks.length <= 2}
-                      className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-30"
+                      className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-30 cursor-pointer"
                       title={
                         selectedStocks.length <= 2
                           ? "Basket requires at least 2 stocks"
@@ -429,7 +491,7 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
                 <Button
                   type="button"
                   onClick={handleCopyLink}
-                  className="h-10 px-4 text-xs font-semibold shrink-0"
+                  className="h-10 px-4 text-xs font-semibold shrink-0 cursor-pointer"
                 >
                   {copied ? (
                     <Check className="mr-1.5 size-4 text-emerald-300" />
@@ -443,7 +505,7 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
                   type="button"
                   variant="outline"
                   onClick={handleShare}
-                  className="h-10 px-3 text-xs shrink-0"
+                  className="h-10 px-3 text-xs shrink-0 cursor-pointer"
                 >
                   <Share2 className="mr-1.5 size-3.5" />
                   Share
@@ -452,10 +514,10 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
                 <Button
                   asChild
                   variant="outline"
-                  className="h-10 px-3 text-xs shrink-0"
+                  className="h-10 px-3 text-xs shrink-0 cursor-pointer"
                 >
                   <Link to="/b/$payload" params={{ payload: basketPayload }}>
-                    <span>Open</span>
+                    <span>Open &amp; Buy</span>
                     <ExternalLink className="ml-1.5 size-3.5" />
                   </Link>
                 </Button>
@@ -479,4 +541,3 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
     </div>
   );
 };
-

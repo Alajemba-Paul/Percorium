@@ -1,80 +1,41 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { BasketBuilder } from "@/components/basket-builder";
-import { IndexWorkshop } from "@/components/index-workshop";
-import { WalletModal } from "@/components/wallet-modal";
-import { useStockBalances } from "@/hooks/use-balances";
-import type { StockSymbol } from "@/lib/percorium/constants";
+import { PresetIndices } from "@/components/preset-indices";
+import type { PresetBasket } from "@/lib/percorium/presets";
 
 export const Route = createFileRoute("/indices")({ component: IndicesPage });
 
 function IndicesPage() {
-  const navigate = useNavigate();
-  const { address, isConnected } = useAccount();
-  const { connectors, connect } = useConnect();
-  const { disconnect } = useDisconnect();
-  const balances = useStockBalances();
-  const [walletModalOpen, setWalletModalOpen] = useState(false);
-  const [walletType, setWalletType] = useState<
-    "injected" | "smart_passkey" | "smart_google" | undefined
-  >(undefined);
+  const [activePreset, setActivePreset] = useState<PresetBasket | null>(null);
 
-  const handleConnectInjected = () => {
-    const injected = connectors.find((c) => c.id === "injected");
-    if (injected) {
-      connect({ connector: injected });
-      setWalletType("injected");
-      setWalletModalOpen(false);
-    }
-  };
-
-  const handleConnectSmartWallet = (method: "passkey" | "google") => {
-    const cb = connectors.find((c) => c.id === "coinbaseWalletSDK");
-    if (cb) {
-      connect({ connector: cb });
-      setWalletType(method === "passkey" ? "smart_passkey" : "smart_google");
-      setWalletModalOpen(false);
+  const handleSelectPreset = (preset: PresetBasket) => {
+    setActivePreset(preset);
+    const builderEl = document.getElementById("custom-curation-builder");
+    if (builderEl) {
+      builderEl.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   };
 
   return (
     <div className="space-y-8">
-      <BasketBuilder />
-
-      <div className="border-t border-border pt-6">
-        <h2 className="font-display text-2xl tracking-tight mb-2">
-          Pre-Curated Baskets & Slabs
-        </h2>
-        <p className="text-xs text-muted-foreground mb-4">
-          Pre-composed baskets using official Coinbase stock inventories.
+      <div className="flex flex-col gap-1.5">
+        <h1 className="font-display text-3xl sm:text-4xl tracking-tight text-foreground">
+          Stock Baskets &amp; Indices
+        </h1>
+        <p className="text-sm text-muted-foreground max-w-2xl">
+          Browse official preset indices (such as Mag 7 and Big Tech) or curate custom multi-stock portfolios of official Coinbase B20 tokenized stocks on Base.
         </p>
-        <IndexWorkshop
-          userEffectiveUsdc={balances.effectiveUsdc}
-          isConnected={isConnected}
-          onOpenWalletModal={() => setWalletModalOpen(true)}
-          onTradeStock={(_symbol: StockSymbol) => {
-            navigate({ to: "/swap" });
-          }}
-        />
       </div>
 
-      <WalletModal
-        isOpen={walletModalOpen}
-        onClose={() => setWalletModalOpen(false)}
-        userAddress={address || ""}
-        isConnected={isConnected}
-        walletType={walletType}
-        userBalanceUsdc={balances.effectiveUsdc}
-        onConnectInjected={handleConnectInjected}
-        onConnectSmartWallet={handleConnectSmartWallet}
-        onDisconnect={() => {
-          disconnect();
-          setWalletType(undefined);
-        }}
-      />
+      {/* 1. Preset Stock Indices */}
+      <PresetIndices onSelectPreset={handleSelectPreset} />
+
+      {/* Divider */}
+      <div className="border-t border-border/80" />
+
+      {/* 2. Custom Basket Curation */}
+      <BasketBuilder selectedPreset={activePreset} />
     </div>
   );
 }
-
-

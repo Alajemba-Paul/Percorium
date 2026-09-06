@@ -25,7 +25,9 @@ import {
 import { shortAddress } from "@/lib/percorium/format";
 import { useDexBoard, usePriceBoard, quoteMap } from "@/hooks/use-board";
 import { useStockBalances } from "@/hooks/use-balances";
-import { IndexWorkshop } from "@/components/index-workshop";
+import { BasketBuilder } from "@/components/basket-builder";
+import { PresetIndices } from "@/components/preset-indices";
+import type { PresetBasket } from "@/lib/percorium/presets";
 import type { StockPriceData } from "./types";
 
 export type ActiveTab =
@@ -39,6 +41,7 @@ export type ActiveTab =
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("overview");
   const [selectedSymbol, setSelectedSymbol] = useState<StockSymbol>("NVDAc");
+  const [activePreset, setActivePreset] = useState<PresetBasket | null>(null);
   const [walletModalOpen, setWalletModalOpen] = useState(false);
   const [walletType, setWalletType] = useState<
     "injected" | "smart_passkey" | "smart_google" | undefined
@@ -175,7 +178,7 @@ export function App() {
               }`}
             >
               <Layers className="w-3.5 h-3.5" />
-              <span>Indices</span>
+              <span>Baskets</span>
             </button>
 
             <button
@@ -428,17 +431,35 @@ export function App() {
           </div>
         )}
 
-        {/* Tab 4: Index Slabs Workshop */}
+        {/* Tab 4: Official Shareable Stock Baskets */}
         {activeTab === "slabs" && (
-          <IndexWorkshop
-            userEffectiveUsdc={userEffectiveUsdc}
-            isConnected={isConnected}
-            onOpenWalletModal={() => setWalletModalOpen(true)}
-            onTradeStock={(symbol) => {
-              setSelectedSymbol(symbol);
-              setActiveTab("desk");
-            }}
-          />
+          <div className="space-y-8">
+            <div className="flex flex-col gap-1">
+              <h2 className="text-2xl sm:text-3xl font-['Instrument_Serif',serif] text-[#f1f0e8]">
+                Stock Baskets &amp; Indices
+              </h2>
+              <p className="text-xs text-[#8f9388]">
+                Browse official preset indices (such as Mag 7 and Big Tech) or curate custom multi-stock portfolios of official Coinbase B20 tokenized stocks on Base.
+              </p>
+            </div>
+
+            {/* 1. Preset Stock Indices */}
+            <PresetIndices
+              onSelectPreset={(preset) => {
+                setActivePreset(preset);
+                const builderEl = document.getElementById("custom-curation-builder");
+                if (builderEl) {
+                  builderEl.scrollIntoView({ behavior: "smooth", block: "start" });
+                }
+              }}
+            />
+
+            {/* Divider */}
+            <div className="border-t border-[#262923]" />
+
+            {/* 2. Custom Basket Curation (Major Feature) */}
+            <BasketBuilder selectedPreset={activePreset} />
+          </div>
         )}
 
         {/* Tab 5: Credit / Lend */}
