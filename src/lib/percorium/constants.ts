@@ -1,4 +1,6 @@
 export const BASE_CHAIN_ID = 8453;
+export const BASE_BUILDER_CODE = "bc_ynyk4o6j" as const;
+export const BASE_BUILDER_WALLET = "0x1A4a4ff8e50468F9Bea313E87C061e032390798F" as const;
 
 export const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
 export const WETH = "0x4200000000000000000000000000000000000006" as const;
