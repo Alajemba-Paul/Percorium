@@ -1,69 +1,21 @@
-import { ShieldAlert, ShieldCheck } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { COMPLIANCE_COPY } from "@/lib/percorium/constants";
-import { useDemoStore } from "@/lib/percorium/demo-store";
+import { ShieldAlert } from "lucide-react";
 import { useEligibility } from "@/hooks/use-board";
 import { useHydrated } from "@/hooks/use-hydrated";
 
 export function EligibilityBanner() {
   const hydrated = useHydrated();
-  const { restricted, needsAck, country, geoRestricted } = useEligibility();
-  const { setAcknowledged, setJurisdiction, jurisdiction } = useDemoStore();
+  const { restricted, country } = useEligibility();
 
   if (!hydrated) return null;
-  if (!restricted && !needsAck) return null;
-
-  if (needsAck) {
-    return (
-      <div className="border-b border-border bg-elevated px-4 py-3">
-        <div className="mx-auto flex max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-pretty text-muted-foreground">
-            {COMPLIANCE_COPY} Please confirm you are not in the US before trading or borrowing.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" onClick={() => setAcknowledged(true)}>
-              I am outside the US
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setJurisdiction("us")}
-            >
-              I am in the US
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  if (!restricted) return null;
 
   return (
-    <div className="border-b border-border bg-destructive/10 px-4 py-3">
-      <div className="mx-auto flex max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3">
-          <ShieldAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
-          <div>
-            <p className="text-sm font-medium text-foreground">
-              Not available in your country
-              {country ? ` · ${country}` : ""}
-            </p>
-            <p className="text-sm text-pretty text-muted-foreground">
-              {COMPLIANCE_COPY} You can view stock prices. Trading, minting, and borrowing are blocked.
-            </p>
-          </div>
+    <div className="border-b border-[#262923] bg-[#c45c4a]/10 px-4 py-2 text-xs font-['IBM_Plex_Sans',sans-serif]">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-[#c45c4a]">
+          <ShieldAlert className="size-3.5 shrink-0" />
+          <span>Not available in the US{country ? ` (${country})` : ""}. Trading is blocked.</span>
         </div>
-        {jurisdiction !== "auto" || geoRestricted ? (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              setJurisdiction("auto");
-              setAcknowledged(false);
-            }}
-          >
-            Reset location
-          </Button>
-        ) : null}
       </div>
     </div>
   );
@@ -71,28 +23,15 @@ export function EligibilityBanner() {
 
 export function EligibilityChip() {
   const hydrated = useHydrated();
-  const { restricted, needsAck, country } = useEligibility();
+  const { restricted, country } = useEligibility();
   if (!hydrated) return null;
-  if (needsAck) {
-    return (
-      <span className="hidden items-center gap-1.5 text-xs text-warn sm:inline-flex">
-        <ShieldAlert className="size-3.5" />
-        Confirm location
-      </span>
-    );
-  }
   if (restricted) {
     return (
-      <span className="hidden items-center gap-1.5 text-xs text-destructive sm:inline-flex">
-        <ShieldAlert className="size-3.5" />
+      <span className="hidden items-center gap-1.5 text-xs text-[#c45c4a] sm:inline-flex font-['IBM_Plex_Mono',monospace]">
+        <ShieldAlert className="size-3" />
         US blocked{country ? ` · ${country}` : ""}
       </span>
     );
   }
-  return (
-    <span className="hidden items-center gap-1.5 text-xs text-success sm:inline-flex">
-      <ShieldCheck className="size-3.5" />
-      Eligible
-    </span>
-  );
+  return null;
 }

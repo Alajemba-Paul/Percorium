@@ -1,42 +1,24 @@
 import { parseUnits } from "viem";
 import { useAccount, useSendTransaction, useWriteContract } from "wagmi";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowDownUp,
-  CircleAlert,
   ExternalLink,
   LoaderCircle,
-  ShieldCheck,
   Sliders,
-  Zap,
-  Route,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { ERC20_ABI } from "@/lib/percorium/abis";
 import {
-  AERO_ROUTER,
-  AERO_SLIPSTREAM_NFPM,
-  AERO_SLIPSTREAM_ROUTER,
-  AERO_UNIVERSAL_ROUTER,
-  PERMIT2,
   STOCKS,
   STOCK_BY_SYMBOL,
   USDC,
-  ZERO_EX_ALLOWANCE_HOLDER,
   type StockSymbol,
 } from "@/lib/percorium/constants";
-import { formatNum, formatUsd } from "@/lib/percorium/format";
+import { formatNum } from "@/lib/percorium/format";
 import { fetchSwapQuote } from "@/lib/percorium/quote";
 import { assertZeroExTarget } from "@/lib/percorium/security";
 import type { QuoteResult, StockQuote, SwapSide } from "@/lib/percorium/types";
@@ -48,32 +30,6 @@ function decimalsFor(token: string) {
   return token.toLowerCase() === USDC.toLowerCase() ? 6 : 8;
 }
 
-function spenderLabelFor(target?: string): string {
-  if (!target) return "None";
-  const lc = target.toLowerCase();
-  if (lc === ZERO_EX_ALLOWANCE_HOLDER.toLowerCase()) return "0x AllowanceHolder";
-  if (lc === AERO_SLIPSTREAM_ROUTER.toLowerCase()) return "Aerodrome Slipstream Router";
-  if (lc === AERO_SLIPSTREAM_NFPM.toLowerCase()) return "Aerodrome Slipstream NFPM";
-  if (lc === AERO_UNIVERSAL_ROUTER.toLowerCase()) return "Aerodrome Universal Router";
-  if (lc === AERO_ROUTER.toLowerCase()) return "Aerodrome Router";
-  if (lc === PERMIT2.toLowerCase()) return "Uniswap Permit2";
-  return "Unknown Spender";
-}
-
-function failReasons(opts: {
-  restricted: boolean;
-  sequencerDown: boolean;
-  grace: boolean;
-  feedBad: boolean;
-}): string[] {
-  const r: string[] = [];
-  if (opts.restricted) r.push("Not available in your country");
-  if (opts.sequencerDown) r.push("Base network is paused");
-  if (opts.grace) r.push("Base network is resuming");
-  if (opts.feedBad) r.push("Official price delayed. Buying is paused.");
-  return r;
-}
-
 export function TradeTicket({
   symbol,
   quote,
@@ -81,15 +37,12 @@ export function TradeTicket({
   symbol: StockSymbol;
   quote?: StockQuote;
 }) {
-  const stock = STOCK_BY_SYMBOL[symbol];
+  const stock = STOCK_BY_SYMBOL[symbol] ?? STOCKS[0];
   const { address, isConnected } = useAccount();
   const { restricted } = useEligibility();
   const board = usePriceBoard();
   const [side, setSide] = useState<SwapSide>("buy");
   const [amount, setAmount] = useState("100");
-  const [pair, setPair] = useState<StockSymbol>(
-    symbol === "NVDAc" ? "AAPLc" : "NVDAc",
-  );
   const [slippageBps, setSlippageBps] = useState<number>(100);
   const [showSlippageConfig, setShowSlippageConfig] = useState(false);
   const balances = useStockBalances();
@@ -99,14 +52,8 @@ export function TradeTicket({
   const { writeContractAsync, isPending: approving } = useWriteContract();
 
   const sequencer = board.data?.sequencer;
-  const feedBad = quote ? quote.status === "paused" || quote.status === "stale" : true;
-  const reasons = failReasons({
-    restricted,
-    sequencerDown: sequencer ? !sequencer.up : true,
-    grace: sequencer?.grace ?? false,
-    feedBad,
-  });
-  const locked = reasons.length > 0;
+  const feedBad = quote ? quote.status === "paused" || quote.status === "stale" : false;
+  const isBlocked = restricted || (sequencer ? !sequencer.up : false) || feedBad;
 
   const route = useMemo(() => {
     if (side === "buy") {
@@ -117,55 +64,62 @@ export function TradeTicket({
         sellSymbol: "USDC",
       };
     }
-    if (side === "sell") {
-      return {
-        sellToken: stock.address,
-        buyToken: USDC,
-        sellDec: 8,
-        sellSymbol: stock.symbol,
-      };
-    }
     return {
       sellToken: stock.address,
-      buyToken: STOCK_BY_SYMBOL[pair].address,
+      buyToken: USDC,
       sellDec: 8,
       sellSymbol: stock.symbol,
     };
-  }, [side, stock.address, stock.symbol, pair]);
+  }, [side, stock.address, stock.symbol]);
 
-  const buyLabel =
-    side === "buy" ? stock.symbol : side === "sell" ? "USDC" : pair;
-
+  const buyLabel = side === "buy" ? stock.symbol : "USDC";
   const aerodromeSwapUrl = `https://aerodrome.finance/swap?from=USDC&to=${stock.address}`;
 
-  async function onQuote() {
-    setQuoting(true);
-    try {
-      const sellAmount = parseUnits(amount || "0", route.sellDec).toString();
-      const res = await fetchSwapQuote({
-        data: {
-          sellToken: route.sellToken,
-          buyToken: route.buyToken,
-          sellAmount,
-          taker: address,
-          slippageBps,
-        },
-      });
-      setQuoteRes(res);
-      if (res.error && !res.buyAmount) toast.error(res.error);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Quote failed");
-    } finally {
-      setQuoting(false);
+  // Prefetch quote whenever stock, side, amount, or wallet changes so Buy button is fast
+  useEffect(() => {
+    let unmounted = false;
+    async function loadQuote() {
+      if (!amount || Number(amount) <= 0) return;
+      setQuoting(true);
+      try {
+        const sellAmount = parseUnits(amount || "0", route.sellDec).toString();
+        const res = await fetchSwapQuote({
+          data: {
+            sellToken: route.sellToken,
+            buyToken: route.buyToken,
+            sellAmount,
+            taker: address,
+            slippageBps,
+          },
+        });
+        if (!unmounted) {
+          setQuoteRes(res);
+        }
+      } catch {
+        if (!unmounted) {
+          setQuoteRes(null);
+        }
+      } finally {
+        if (!unmounted) setQuoting(false);
+      }
     }
-  }
+
+    const timer = setTimeout(() => {
+      loadQuote();
+    }, 200);
+
+    return () => {
+      unmounted = true;
+      clearTimeout(timer);
+    };
+  }, [stock.address, side, amount, address, slippageBps, route.sellDec, route.sellToken, route.buyToken]);
 
   async function onExecute() {
-    if (locked) {
-      toast.error("Trade is blocked.");
+    if (restricted) {
+      toast.error("Not available in the US.");
       return;
     }
-    if (!address) {
+    if (!address || !isConnected) {
       toast.error("Connect a wallet to trade.");
       return;
     }
@@ -190,17 +144,14 @@ export function TradeTicket({
       assertZeroExTarget(fresh.to, fresh.allowanceTarget);
 
       if (fresh.allowanceTarget) {
-        const spenderName = spenderLabelFor(fresh.allowanceTarget);
-        toast.info(
-          `Requesting approval for ${amount} ${route.sellSymbol} to ${spenderName}.`,
-        );
+        toast.info(`Requesting approval for ${amount} ${route.sellSymbol}...`);
         await writeContractAsync({
           address: route.sellToken,
           abi: ERC20_ABI,
           functionName: "approve",
           args: [fresh.allowanceTarget, BigInt(fresh.sellAmount)],
         });
-        toast.success(`Approval confirmed for ${spenderName}.`);
+        toast.success(`Approval confirmed.`);
       }
 
       const hash = await sendTransactionAsync({
@@ -219,9 +170,6 @@ export function TradeTicket({
   const buyAmt = quoteRes
     ? Number(quoteRes.buyAmount) / 10 ** buyDec
     : 0;
-  const oraclePx = quote?.oracle ?? 0;
-  const implied =
-    side === "buy" && Number(amount) > 0 ? buyAmt / Number(amount) : 0;
 
   const availableAmt =
     side === "buy"
@@ -232,25 +180,37 @@ export function TradeTicket({
       ? `${formatNum(availableAmt, 2)} USDC`
       : `${formatNum(availableAmt, 4)} ${stock.symbol}`;
 
+  const isButtonDisabled =
+    isBlocked ||
+    sending ||
+    approving ||
+    !isConnected ||
+    !amount ||
+    Number(amount) <= 0 ||
+    (quoteRes !== null && !quoteRes.ok);
+
   return (
-    <div className="rounded-xl bg-card p-5 shadow-border">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="font-display text-xl">Trade Ticket</h2>
-        <div className="flex items-center gap-2">
+    <div className="rounded-xl bg-[#131511] border border-[#262923] p-4 sm:p-5 shadow-sm space-y-4 font-['IBM_Plex_Sans',sans-serif]">
+      {/* Top Header: Ticket Title + Aerodrome deep link & Slippage */}
+      <div className="flex items-center justify-between border-b border-[#262923] pb-3">
+        <h2 className="font-['Instrument_Serif',serif] text-xl text-[#f1f0e8]">
+          Swap
+        </h2>
+        <div className="flex items-center gap-2.5">
           <a
             href={aerodromeSwapUrl}
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-1 font-mono text-xs text-muted-foreground hover:text-foreground"
+            className="flex items-center gap-1 font-['IBM_Plex_Mono',monospace] text-[11px] text-[#8f9388] hover:text-[#cfd8c6] transition-colors"
           >
-            Open on Aerodrome
+            <span>Aerodrome</span>
             <ExternalLink className="size-3" />
           </a>
           <button
             type="button"
             onClick={() => setShowSlippageConfig(!showSlippageConfig)}
-            className="flex items-center gap-1 rounded bg-secondary px-2 py-1 font-mono text-xs text-secondary-foreground hover:bg-secondary/80"
-            title="Max price slip"
+            className="flex items-center gap-1 rounded bg-[#1a1d18] border border-[#262923] px-2 py-0.5 font-['IBM_Plex_Mono',monospace] text-[11px] text-[#8f9388] hover:text-[#f1f0e8] cursor-pointer"
+            title="Slippage tolerance"
           >
             <Sliders className="size-3" />
             <span>{(slippageBps / 100).toFixed(1)}%</span>
@@ -258,252 +218,132 @@ export function TradeTicket({
         </div>
       </div>
 
-      {showSlippageConfig ? (
-        <div className="mb-4 rounded-lg border border-border/70 bg-elevated p-3 text-xs">
-          <div className="flex items-center justify-between font-medium">
-            <span>Max Price Slip (Limit: 3.0%)</span>
-            <span className="font-mono tabular-nums">{(slippageBps / 100).toFixed(2)}%</span>
+      {/* Slippage Settings (Collapsible) */}
+      {showSlippageConfig && (
+        <div className="rounded-lg border border-[#262923] bg-[#1a1d18] p-3 text-xs space-y-2">
+          <div className="flex items-center justify-between text-[#8f9388]">
+            <span>Slippage Tolerance</span>
+            <span className="font-['IBM_Plex_Mono',monospace] text-[#f1f0e8]">
+              {(slippageBps / 100).toFixed(1)}%
+            </span>
           </div>
-          <div className="mt-2 flex gap-1.5">
+          <div className="flex gap-1.5">
             {[50, 100, 200, 300].map((bps) => (
               <button
                 key={bps}
                 type="button"
                 onClick={() => setSlippageBps(bps)}
                 className={cn(
-                  "flex-1 rounded py-1 font-mono font-medium transition-colors",
+                  "flex-1 rounded py-1 font-['IBM_Plex_Mono',monospace] text-xs font-medium transition cursor-pointer",
                   slippageBps === bps
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary text-secondary-foreground hover:bg-secondary/70",
+                    ? "bg-[#cfd8c6] text-[#0c0d0b]"
+                    : "bg-[#131511] border border-[#262923] text-[#8f9388] hover:text-[#f1f0e8]",
                 )}
               >
                 {(bps / 100).toFixed(1)}%
               </button>
             ))}
           </div>
-          {slippageBps > 100 ? (
-            <p className="mt-2 text-warn">
-              High slip warning: Higher slippage allows worse trade prices. The limit is 3.0%.
-            </p>
-          ) : null}
         </div>
-      ) : null}
+      )}
 
+      {/* Side Switcher: Buy or Sell */}
       <Tabs value={side} onValueChange={(v) => setSide(v as SwapSide)}>
-        <TabsList className="w-full">
-          <TabsTrigger value="buy">Buy</TabsTrigger>
-          <TabsTrigger value="sell">Sell</TabsTrigger>
-          <TabsTrigger value="swap">Swap</TabsTrigger>
+        <TabsList className="w-full bg-[#1a1d18] border border-[#262923] p-0.5 rounded-lg grid grid-cols-2">
+          <TabsTrigger
+            value="buy"
+            className="rounded-md text-xs font-semibold py-1.5 data-[state=active]:bg-[#cfd8c6] data-[state=active]:text-[#0c0d0b] text-[#8f9388] transition cursor-pointer"
+          >
+            Buy {stock.symbol}
+          </TabsTrigger>
+          <TabsTrigger
+            value="sell"
+            className="rounded-md text-xs font-semibold py-1.5 data-[state=active]:bg-[#cfd8c6] data-[state=active]:text-[#0c0d0b] text-[#8f9388] transition cursor-pointer"
+          >
+            Sell {stock.symbol}
+          </TabsTrigger>
         </TabsList>
       </Tabs>
 
-      <div className="mt-4 space-y-3">
-        <div>
-          <div className="flex items-center justify-between">
-            <Label>
-              {side === "buy" ? "USDC to spend" : `Sell ${stock.symbol}`}
-            </Label>
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <span>Available:</span>
-              <span className="font-mono tabular-nums text-foreground">
-                {availableLabel}
-              </span>
-              {availableAmt > 0 ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (side === "buy") {
-                      setAmount((Math.floor(availableAmt * 100) / 100).toFixed(2));
-                    } else {
-                      setAmount(availableAmt.toString());
-                    }
-                  }}
-                  className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[10px] font-medium text-secondary-foreground transition-colors hover:bg-secondary/80"
-                >
-                  MAX
-                </button>
-              ) : null}
-            </div>
+      {/* Amount Input */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between text-xs">
+          <Label className="text-xs text-[#8f9388]">
+            {side === "buy" ? "Pay with USDC" : `Sell ${stock.symbol}`}
+          </Label>
+          <div className="flex items-center gap-1.5 text-[11px] text-[#8f9388]">
+            <span>Available:</span>
+            <span className="font-['IBM_Plex_Mono',monospace] text-[#f1f0e8]">
+              {availableLabel}
+            </span>
+            {availableAmt > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (side === "buy") {
+                    setAmount((Math.floor(availableAmt * 100) / 100).toFixed(2));
+                  } else {
+                    setAmount(availableAmt.toString());
+                  }
+                }}
+                className="rounded bg-[#1a1d18] border border-[#262923] px-1.5 py-0.5 font-['IBM_Plex_Mono',monospace] text-[10px] font-medium text-[#cfd8c6] hover:bg-[#20241e] cursor-pointer"
+              >
+                MAX
+              </button>
+            )}
           </div>
-          <Input
-            className="mt-1.5 font-mono tabular-nums"
-            inputMode="decimal"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
-          />
         </div>
-        {side === "swap" ? (
-          <div>
-            <Label>Buy</Label>
-            <Select value={pair} onValueChange={(v) => setPair(v as StockSymbol)}>
-              <SelectTrigger className="mt-1.5">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {STOCKS.filter((s) => s.symbol !== symbol).map((s) => (
-                  <SelectItem key={s.symbol} value={s.symbol}>
-                    {s.symbol} · {s.company}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        ) : null}
 
-        <Button
-          variant="secondary"
-          className="w-full"
-          onClick={onQuote}
-          disabled={quoting || !amount}
-        >
-          {quoting ? (
-            <LoaderCircle className="size-4 animate-spin" />
-          ) : (
-            <ArrowDownUp className="size-4" />
-          )}
-          Get Quote
-        </Button>
+        <Input
+          className="bg-[#1a1d18] border-[#262923] text-[#f1f0e8] font-['IBM_Plex_Mono',monospace] text-base h-11 focus-visible:ring-[#cfd8c6]"
+          inputMode="decimal"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+          placeholder="0.00"
+        />
       </div>
 
-      {quoteRes ? (
-        <div className="mt-4 space-y-2 rounded-lg bg-elevated p-3 text-sm">
-          {/* Visual Route Path */}
-          <div className="rounded-md border border-border/60 bg-background/60 p-2.5">
-            <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1.5">
-              <span className="flex items-center gap-1 font-medium text-foreground">
-                <Route className="size-3 text-primary" />
-                <span>Base Smart Route</span>
-              </span>
-              <span className="font-mono text-[10px] text-emerald-400">
-                Optimal Liquidity
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 text-xs font-mono">
-              <span className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-semibold">
-                {route.sellSymbol}
-              </span>
-              <span className="text-muted-foreground">→</span>
-              <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 text-[11px]">
-                {quoteRes.source}
-              </span>
-              <span className="text-muted-foreground">→</span>
-              <span className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-semibold">
-                {buyLabel}
-              </span>
-            </div>
-          </div>
-
-          <dl className="space-y-2 pt-1">
-            <Row
-              k="You receive"
-              v={`${formatNum(buyAmt, 4)} ${buyLabel}`}
-            />
-            <Row k="Execution Route" v={quoteRes.source} />
-            {oraclePx > 0 && side === "buy" && implied > 0 ? (
-              <Row
-                k="Gap vs official price"
-                v={`${(((1 / implied) / oraclePx - 1) * 100).toFixed(2)}%`}
-              />
+      {/* Output Preview */}
+      <div className="rounded-lg bg-[#1a1d18] border border-[#262923] p-3 text-xs space-y-1.5">
+        <div className="flex items-center justify-between text-[#8f9388]">
+          <span>You receive (est.)</span>
+          <span className="font-['IBM_Plex_Mono',monospace] font-bold text-sm text-[#f1f0e8] flex items-center gap-1.5">
+            {quoting ? (
+              <LoaderCircle className="size-3.5 animate-spin text-[#8f9388]" />
             ) : null}
-            {oraclePx > 0 ? (
-              <Row k="Official price" v={formatUsd(oraclePx, 2)} />
-            ) : null}
-
-            {/* Base L2 Gas Estimation (Standard Base L2 Gas, No Paymaster) */}
-            <div className="flex items-center justify-between gap-3 text-xs pt-1 border-t border-border/40">
-              <dt className="flex items-center gap-1 text-muted-foreground">
-                <Zap className="size-3 text-[#0052FF]" />
-                <span>Base L2 Gas (Est.)</span>
-              </dt>
-              <dd className="font-mono tabular-nums text-foreground">
-                {quoteRes.estimatedGas ? `~$0.0008 (${quoteRes.estimatedGas})` : "< $0.001 (Base L2)"}
-              </dd>
-            </div>
-          </dl>
-
-          {quoteRes.allowanceTarget ? (
-            <div className="mt-2 rounded border border-border/50 bg-background/50 p-2 text-xs">
-              <div className="flex items-center gap-1 font-medium text-foreground">
-                <ShieldCheck className="size-3.5 text-emerald-500" />
-                <span>Verified Spender</span>
-              </div>
-              <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-                {spenderLabelFor(quoteRes.allowanceTarget)} ({quoteRes.allowanceTarget.slice(0, 8)}…
-                {quoteRes.allowanceTarget.slice(-6)})
-              </p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
-                Approval amount: exact {amount} {route.sellSymbol} (no unlimited approval).
-              </p>
-            </div>
-          ) : null}
-
-          {quoteRes.issues?.map((issue) => (
-            <p key={issue} className="text-xs text-muted-foreground">
-              {issue}
-            </p>
-          ))}
-          {quoteRes.error ? (
-            <p className="text-xs text-destructive">{quoteRes.error}</p>
-          ) : null}
-          {quoteRes.ok && !quoteRes.executable && !isConnected ? (
-            <p className="text-xs text-warn">
-              Connect a wallet to get a live executable quote.
-            </p>
-          ) : null}
+            <span>
+              {buyAmt > 0 ? formatNum(buyAmt, 4) : "0.00"} {buyLabel}
+            </span>
+          </span>
         </div>
-      ) : null}
+      </div>
 
-      {locked ? (
-        <div className="mt-4 flex gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-          <CircleAlert className="mt-0.5 size-4 shrink-0" />
-          <div>
-            <p className="font-medium">Trade is blocked</p>
-            <ul className="mt-1 list-disc pl-4 text-xs">
-              {reasons.map((r) => (
-                <li key={r}>{r}</li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      ) : null}
-
+      {/* Single Primary Action Button */}
       <Button
-        className={cn("mt-4 w-full")}
-        disabled={
-          locked ||
-          sending ||
-          approving ||
-          !isConnected ||
-          !quoteRes ||
-          quoteRes.source === "oracle"
-        }
+        className="w-full h-11 rounded-lg bg-[#cfd8c6] hover:bg-[#e2ead9] text-[#0c0d0b] text-sm font-semibold transition-all duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+        disabled={isButtonDisabled}
         onClick={onExecute}
       >
-        {sending || approving
-          ? "Submitting..."
-          : !isConnected
-            ? "Connect Wallet to Trade"
-            : quoteRes?.source === "oracle"
-              ? "No Trade Route"
-              : side === "buy"
-                ? `Buy ${stock.symbol}`
-                : side === "sell"
-                  ? `Sell ${stock.symbol}`
-                  : `Swap ${stock.symbol}`}
+        {sending || approving ? (
+          <span className="flex items-center gap-2">
+            <LoaderCircle className="size-4 animate-spin" />
+            <span>Confirming in Wallet...</span>
+          </span>
+        ) : !isConnected ? (
+          "Connect Wallet"
+        ) : restricted ? (
+          "Not Available in US"
+        ) : side === "buy" ? (
+          `Buy ${stock.symbol}`
+        ) : (
+          `Sell ${stock.symbol}`
+        )}
       </Button>
-      <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-        Official list: only official Coinbase stock addresses on Base. Exchange prices may trade above or below the official price.
+
+      {/* Footer Disclaimer */}
+      <p className="text-[11px] text-[#8f9388] text-center leading-relaxed font-['IBM_Plex_Sans',sans-serif]">
+        Pay with USDC. Approve in your wallet.
       </p>
     </div>
   );
 }
-
-function Row({ k, v }: { k: string; v: string }) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <dt className="text-muted-foreground">{k}</dt>
-      <dd className="font-mono tabular-nums text-foreground">{v}</dd>
-    </div>
-  );
-}
-
