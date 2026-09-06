@@ -3,6 +3,7 @@ import { encodeBasketPayload } from "./basket";
 
 export interface PresetBasket {
   id: string;
+  slug: string;
   name: string;
   ticker: string;
   description: string;
@@ -13,97 +14,8 @@ export interface PresetBasket {
 
 export const PRESET_INDICES: PresetBasket[] = [
   {
-    id: "big-tech",
-    name: "Big Tech Titans",
-    ticker: "TITAN",
-    description: "Equal-weighted exposure to Apple, Microsoft, NVIDIA, and Alphabet.",
-    defaultSpendUsdc: 250,
-    legs: [
-      { symbol: "AAPLc", address: CB_STOCKS.AAPLc, weight: 25 },
-      { symbol: "MSFTc", address: CB_STOCKS.MSFTc, weight: 25 },
-      { symbol: "NVDAc", address: CB_STOCKS.NVDAc, weight: 25 },
-      { symbol: "GOOGLc", address: CB_STOCKS.GOOGLc, weight: 25 },
-    ],
-    payload: encodeBasketPayload({
-      name: "Big Tech Titans",
-      spendUsdc: 250,
-      legs: [
-        { address: CB_STOCKS.AAPLc, weight: 25 },
-        { address: CB_STOCKS.MSFTc, weight: 25 },
-        { address: CB_STOCKS.NVDAc, weight: 25 },
-        { address: CB_STOCKS.GOOGLc, weight: 25 },
-      ],
-    }),
-  },
-  {
-    id: "crypto-equities",
-    name: "Digital Asset Equities",
-    ticker: "CRYPTO",
-    description: "Pure-play crypto infrastructure, stablecoin issuers, and Bitcoin treasury balance sheets.",
-    defaultSpendUsdc: 250,
-    legs: [
-      { symbol: "COINc", address: CB_STOCKS.COINc, weight: 40 },
-      { symbol: "CRCLc", address: CB_STOCKS.CRCLc, weight: 30 },
-      { symbol: "MSTRc", address: CB_STOCKS.MSTRc, weight: 30 },
-    ],
-    payload: encodeBasketPayload({
-      name: "Digital Asset Equities",
-      spendUsdc: 250,
-      legs: [
-        { address: CB_STOCKS.COINc, weight: 40 },
-        { address: CB_STOCKS.CRCLc, weight: 30 },
-        { address: CB_STOCKS.MSTRc, weight: 30 },
-      ],
-    }),
-  },
-  {
-    id: "ai-compute",
-    name: "AI & Compute Frontier",
-    ticker: "AICOMP",
-    description: "Foundational hardware accelerators, semiconductor fabrication, and hyperscale compute.",
-    defaultSpendUsdc: 250,
-    legs: [
-      { symbol: "NVDAc", address: CB_STOCKS.NVDAc, weight: 40 },
-      { symbol: "MSFTc", address: CB_STOCKS.MSFTc, weight: 25 },
-      { symbol: "GOOGLc", address: CB_STOCKS.GOOGLc, weight: 20 },
-      { symbol: "INTCc", address: CB_STOCKS.INTCc, weight: 15 },
-    ],
-    payload: encodeBasketPayload({
-      name: "AI & Compute Frontier",
-      spendUsdc: 250,
-      legs: [
-        { address: CB_STOCKS.NVDAc, weight: 40 },
-        { address: CB_STOCKS.MSFTc, weight: 25 },
-        { address: CB_STOCKS.GOOGLc, weight: 20 },
-        { address: CB_STOCKS.INTCc, weight: 15 },
-      ],
-    }),
-  },
-  {
-    id: "next-gen-mobility",
-    name: "Next-Gen Tech & Mobility",
-    ticker: "NEXUS",
-    description: "Autonomous mobility, AI agents, global logistics, and aerospace technology.",
-    defaultSpendUsdc: 250,
-    legs: [
-      { symbol: "TSLAc", address: CB_STOCKS.TSLAc, weight: 35 },
-      { symbol: "AMZNc", address: CB_STOCKS.AMZNc, weight: 25 },
-      { symbol: "METAc", address: CB_STOCKS.METAc, weight: 25 },
-      { symbol: "SPCXc", address: CB_STOCKS.SPCXc, weight: 15 },
-    ],
-    payload: encodeBasketPayload({
-      name: "Next-Gen Tech & Mobility",
-      spendUsdc: 250,
-      legs: [
-        { address: CB_STOCKS.TSLAc, weight: 35 },
-        { address: CB_STOCKS.AMZNc, weight: 25 },
-        { address: CB_STOCKS.METAc, weight: 25 },
-        { address: CB_STOCKS.SPCXc, weight: 15 },
-      ],
-    }),
-  },
-  {
     id: "mag7",
+    slug: "mag7",
     name: "Magnificent 7",
     ticker: "MAG7",
     description: "The 7 titan mega-cap equities powering global computing, cloud, AI, and consumer tech.",
@@ -131,4 +43,127 @@ export const PRESET_INDICES: PresetBasket[] = [
       ],
     }),
   },
+  {
+    id: "big-tech",
+    slug: "big-tech",
+    name: "Big Tech Titans",
+    ticker: "TITAN",
+    description: "Equal-weighted exposure to Apple, Microsoft, NVIDIA, and Alphabet.",
+    defaultSpendUsdc: 250,
+    legs: [
+      { symbol: "AAPLc", address: CB_STOCKS.AAPLc, weight: 25 },
+      { symbol: "MSFTc", address: CB_STOCKS.MSFTc, weight: 25 },
+      { symbol: "NVDAc", address: CB_STOCKS.NVDAc, weight: 25 },
+      { symbol: "GOOGLc", address: CB_STOCKS.GOOGLc, weight: 25 },
+    ],
+    payload: encodeBasketPayload({
+      name: "Big Tech Titans",
+      spendUsdc: 250,
+      legs: [
+        { address: CB_STOCKS.AAPLc, weight: 25 },
+        { address: CB_STOCKS.MSFTc, weight: 25 },
+        { address: CB_STOCKS.NVDAc, weight: 25 },
+        { address: CB_STOCKS.GOOGLc, weight: 25 },
+      ],
+    }),
+  },
+  {
+    id: "crypto-equities",
+    slug: "crypto-equities",
+    name: "Digital Asset Equities",
+    ticker: "CRYPTO",
+    description: "Pure-play crypto infrastructure, stablecoin issuers, and Bitcoin treasury balance sheets.",
+    defaultSpendUsdc: 250,
+    legs: [
+      { symbol: "COINc", address: CB_STOCKS.COINc, weight: 40 },
+      { symbol: "CRCLc", address: CB_STOCKS.CRCLc, weight: 30 },
+      { symbol: "MSTRc", address: CB_STOCKS.MSTRc, weight: 30 },
+    ],
+    payload: encodeBasketPayload({
+      name: "Digital Asset Equities",
+      spendUsdc: 250,
+      legs: [
+        { address: CB_STOCKS.COINc, weight: 40 },
+        { address: CB_STOCKS.CRCLc, weight: 30 },
+        { address: CB_STOCKS.MSTRc, weight: 30 },
+      ],
+    }),
+  },
+  {
+    id: "ai-compute",
+    slug: "ai-compute",
+    name: "AI & Compute Frontier",
+    ticker: "AICOMP",
+    description: "Foundational hardware accelerators, semiconductor fabrication, and hyperscale compute.",
+    defaultSpendUsdc: 250,
+    legs: [
+      { symbol: "NVDAc", address: CB_STOCKS.NVDAc, weight: 40 },
+      { symbol: "MSFTc", address: CB_STOCKS.MSFTc, weight: 25 },
+      { symbol: "GOOGLc", address: CB_STOCKS.GOOGLc, weight: 20 },
+      { symbol: "INTCc", address: CB_STOCKS.INTCc, weight: 15 },
+    ],
+    payload: encodeBasketPayload({
+      name: "AI & Compute Frontier",
+      spendUsdc: 250,
+      legs: [
+        { address: CB_STOCKS.NVDAc, weight: 40 },
+        { address: CB_STOCKS.MSFTc, weight: 25 },
+        { address: CB_STOCKS.GOOGLc, weight: 20 },
+        { address: CB_STOCKS.INTCc, weight: 15 },
+      ],
+    }),
+  },
+  {
+    id: "next-gen-mobility",
+    slug: "next-gen-mobility",
+    name: "Next-Gen Tech & Mobility",
+    ticker: "NEXUS",
+    description: "Autonomous mobility, AI agents, global logistics, and aerospace technology.",
+    defaultSpendUsdc: 250,
+    legs: [
+      { symbol: "TSLAc", address: CB_STOCKS.TSLAc, weight: 35 },
+      { symbol: "AMZNc", address: CB_STOCKS.AMZNc, weight: 25 },
+      { symbol: "METAc", address: CB_STOCKS.METAc, weight: 25 },
+      { symbol: "SPCXc", address: CB_STOCKS.SPCXc, weight: 15 },
+    ],
+    payload: encodeBasketPayload({
+      name: "Next-Gen Tech & Mobility",
+      spendUsdc: 250,
+      legs: [
+        { address: CB_STOCKS.TSLAc, weight: 35 },
+        { address: CB_STOCKS.AMZNc, weight: 25 },
+        { address: CB_STOCKS.METAc, weight: 25 },
+        { address: CB_STOCKS.SPCXc, weight: 15 },
+      ],
+    }),
+  },
 ];
+
+const PRESET_LOOKUP_MAP: Record<string, PresetBasket> = {};
+
+for (const p of PRESET_INDICES) {
+  PRESET_LOOKUP_MAP[p.id.toLowerCase()] = p;
+  PRESET_LOOKUP_MAP[p.slug.toLowerCase()] = p;
+  PRESET_LOOKUP_MAP[p.ticker.toLowerCase()] = p;
+  PRESET_LOOKUP_MAP[p.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")] = p;
+  PRESET_LOOKUP_MAP[p.name.toLowerCase().replace(/[^a-z0-9]/g, "")] = p;
+}
+
+// Extra common aliases
+PRESET_LOOKUP_MAP["mag-7"] = PRESET_INDICES[0];
+PRESET_LOOKUP_MAP["magnificent7"] = PRESET_INDICES[0];
+PRESET_LOOKUP_MAP["magnificent-7"] = PRESET_INDICES[0];
+PRESET_LOOKUP_MAP["titans"] = PRESET_INDICES[1];
+PRESET_LOOKUP_MAP["bigtech"] = PRESET_INDICES[1];
+PRESET_LOOKUP_MAP["crypto"] = PRESET_INDICES[2];
+PRESET_LOOKUP_MAP["digital-assets"] = PRESET_INDICES[2];
+PRESET_LOOKUP_MAP["aicomp"] = PRESET_INDICES[3];
+PRESET_LOOKUP_MAP["ai"] = PRESET_INDICES[3];
+PRESET_LOOKUP_MAP["nexus"] = PRESET_INDICES[4];
+PRESET_LOOKUP_MAP["mobility"] = PRESET_INDICES[4];
+
+export function findPresetBySlugOrId(key: string): PresetBasket | null {
+  if (!key) return null;
+  const clean = key.trim().toLowerCase();
+  return PRESET_LOOKUP_MAP[clean] || null;
+}

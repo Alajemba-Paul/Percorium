@@ -26,13 +26,14 @@ export const PresetIndices: React.FC<PresetIndicesProps> = ({ onSelectPreset }) 
       typeof window !== "undefined" && window.location?.origin
         ? window.location.origin
         : "https://percorium.app";
-    const url = `${origin}/b/${preset.payload}`;
+    const slug = preset.slug || preset.id;
+    const url = `${origin}/${slug}`;
 
     try {
       if (navigator?.clipboard?.writeText) {
         await navigator.clipboard.writeText(url);
         setCopiedId(preset.id);
-        toast.success(`Copied link for ${preset.name}`);
+        toast.success(`Copied link for ${preset.name} (${origin}/${slug})`);
         setTimeout(() => setCopiedId(null), 2000);
         return;
       }
@@ -120,7 +121,7 @@ export const PresetIndices: React.FC<PresetIndicesProps> = ({ onSelectPreset }) 
                 size="sm"
                 className="h-8 flex-1 text-xs font-semibold"
               >
-                <Link to="/b/$payload" params={{ payload: preset.payload }}>
+                <Link to="/$basketname" params={{ basketname: preset.slug || preset.id }}>
                   <span>Buy Basket</span>
                   <ExternalLink className="ml-1.5 size-3.5" />
                 </Link>

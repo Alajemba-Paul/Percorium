@@ -401,10 +401,12 @@ export function BasketView({ payload }: { payload: string }) {
   };
 
   const shareableUrl = useMemo(() => {
-    if (typeof window !== "undefined") {
-      return `${window.location.origin}/b/${payload}`;
-    }
-    return `https://percorium.app/b/${payload}`;
+    const origin =
+      typeof window !== "undefined" && window.location?.origin
+        ? window.location.origin
+        : "https://percorium.app";
+    // If payload is already a clean slug (no dots/dashes base64url padding) or a short slug
+    return `${origin}/${payload}`;
   }, [payload]);
 
   const handleCopyLink = async () => {

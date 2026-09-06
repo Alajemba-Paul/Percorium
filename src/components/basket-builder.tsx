@@ -21,7 +21,11 @@ import {
   STOCK_BY_SYMBOL,
   type StockSymbol,
 } from "@/lib/percorium/constants";
-import { encodeBasketPayload } from "@/lib/percorium/basket";
+import {
+  encodeBasketPayload,
+  slugifyBasketName,
+  registerCustomBasket,
+} from "@/lib/percorium/basket";
 import { PRESET_INDICES, type PresetBasket } from "@/lib/percorium/presets";
 import { formatNum } from "@/lib/percorium/format";
 import { usePriceBoard, quoteMap } from "@/hooks/use-board";
@@ -109,14 +113,19 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
     });
   }, [cleanName, spendNum, selectedStocks, weights, isBasketValid]);
 
+  const basketSlug = useMemo(() => {
+    return slugifyBasketName(cleanName);
+  }, [cleanName]);
+
   const shareableUrl = useMemo(() => {
-    if (!basketPayload) return "";
+    if (!basketPayload || !isBasketValid) return "";
+    registerCustomBasket(basketSlug, basketPayload);
     const origin =
       typeof window !== "undefined" && window.location?.origin
         ? window.location.origin
         : "https://percorium.app";
-    return `${origin}/b/${basketPayload}`;
-  }, [basketPayload]);
+    return `${origin}/${basketSlug}`;
+  }, [basketPayload, isBasketValid, basketSlug]);
 
   const handleApplyPreset = (preset: PresetBasket) => {
     setName(preset.name);
@@ -516,7 +525,7 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
                   variant="outline"
                   className="h-10 px-3 text-xs shrink-0 cursor-pointer"
                 >
-                  <Link to="/b/$payload" params={{ payload: basketPayload }}>
+                  <Link to="/$basketname" params={{ basketname: basketSlug }}>
                     <span>Open &amp; Buy</span>
                     <ExternalLink className="ml-1.5 size-3.5" />
                   </Link>

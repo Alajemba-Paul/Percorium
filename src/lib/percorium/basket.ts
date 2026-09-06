@@ -2,7 +2,10 @@ import { createServerFn } from "@tanstack/react-start";
 import { isAddress, getAddress } from "viem";
 import {
   STOCK_BY_ADDRESS,
+  STOCK_BY_SYMBOL,
+  CB_STOCKS,
   type StockMeta,
+  type StockSymbol,
 } from "./constants";
 
 export interface BasketLeg {
@@ -40,6 +43,188 @@ export interface InvalidBasket {
 }
 
 export type BasketValidationResult = ValidatedBasket | InvalidBasket;
+
+export function slugifyBasketName(name: string): string {
+  return (
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 32) || "basket"
+  );
+}
+
+const MEMORY_BASKETS: Record<string, string> = {};
+
+export function registerCustomBasket(slug: string, payload: string): void {
+  if (!slug || !payload) return;
+  const cleanSlug = slug.toLowerCase().trim();
+  MEMORY_BASKETS[cleanSlug] = payload;
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      const existing = JSON.parse(
+        localStorage.getItem("percorium_custom_baskets") || "{}",
+      );
+      existing[cleanSlug] = payload;
+      localStorage.setItem("percorium_custom_baskets", JSON.stringify(existing));
+    } catch {
+      // storage errors ignored
+    }
+  }
+}
+
+export function getCustomBasketPayload(slug: string): string | null {
+  if (!slug) return null;
+  const cleanSlug = slug.toLowerCase().trim();
+  if (MEMORY_BASKETS[cleanSlug]) return MEMORY_BASKETS[cleanSlug];
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      const existing = JSON.parse(
+        localStorage.getItem("percorium_custom_baskets") || "{}",
+      );
+      if (existing[cleanSlug]) return existing[cleanSlug];
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
+
+/**
+ * Built-in preset definitions by slug/id for instant direct resolution.
+ */
+const KNOWN_PRESET_MAP: Record<
+  string,
+  { name: string; spendUsdc: number; legs: { symbol: StockSymbol; weight: number }[] }
+> = {
+  mag7: {
+    name: "Magnificent 7",
+    spendUsdc: 350,
+    legs: [
+      { symbol: "NVDAc", weight: 20 },
+      { symbol: "AAPLc", weight: 15 },
+      { symbol: "MSFTc", weight: 15 },
+      { symbol: "AMZNc", weight: 15 },
+      { symbol: "GOOGLc", weight: 15 },
+      { symbol: "METAc", weight: 10 },
+      { symbol: "TSLAc", weight: 10 },
+    ],
+  },
+  "mag-7": {
+    name: "Magnificent 7",
+    spendUsdc: 350,
+    legs: [
+      { symbol: "NVDAc", weight: 20 },
+      { symbol: "AAPLc", weight: 15 },
+      { symbol: "MSFTc", weight: 15 },
+      { symbol: "AMZNc", weight: 15 },
+      { symbol: "GOOGLc", weight: 15 },
+      { symbol: "METAc", weight: 10 },
+      { symbol: "TSLAc", weight: 10 },
+    ],
+  },
+  "magnificent-7": {
+    name: "Magnificent 7",
+    spendUsdc: 350,
+    legs: [
+      { symbol: "NVDAc", weight: 20 },
+      { symbol: "AAPLc", weight: 15 },
+      { symbol: "MSFTc", weight: 15 },
+      { symbol: "AMZNc", weight: 15 },
+      { symbol: "GOOGLc", weight: 15 },
+      { symbol: "METAc", weight: 10 },
+      { symbol: "TSLAc", weight: 10 },
+    ],
+  },
+  "big-tech": {
+    name: "Big Tech Titans",
+    spendUsdc: 250,
+    legs: [
+      { symbol: "AAPLc", weight: 25 },
+      { symbol: "MSFTc", weight: 25 },
+      { symbol: "NVDAc", weight: 25 },
+      { symbol: "GOOGLc", weight: 25 },
+    ],
+  },
+  titan: {
+    name: "Big Tech Titans",
+    spendUsdc: 250,
+    legs: [
+      { symbol: "AAPLc", weight: 25 },
+      { symbol: "MSFTc", weight: 25 },
+      { symbol: "NVDAc", weight: 25 },
+      { symbol: "GOOGLc", weight: 25 },
+    ],
+  },
+  "big-tech-titans": {
+    name: "Big Tech Titans",
+    spendUsdc: 250,
+    legs: [
+      { symbol: "AAPLc", weight: 25 },
+      { symbol: "MSFTc", weight: 25 },
+      { symbol: "NVDAc", weight: 25 },
+      { symbol: "GOOGLc", weight: 25 },
+    ],
+  },
+  "crypto-equities": {
+    name: "Digital Asset Equities",
+    spendUsdc: 250,
+    legs: [
+      { symbol: "COINc", weight: 40 },
+      { symbol: "CRCLc", weight: 30 },
+      { symbol: "MSTRc", weight: 30 },
+    ],
+  },
+  crypto: {
+    name: "Digital Asset Equities",
+    spendUsdc: 250,
+    legs: [
+      { symbol: "COINc", weight: 40 },
+      { symbol: "CRCLc", weight: 30 },
+      { symbol: "MSTRc", weight: 30 },
+    ],
+  },
+  "ai-compute": {
+    name: "AI & Compute Frontier",
+    spendUsdc: 250,
+    legs: [
+      { symbol: "NVDAc", weight: 40 },
+      { symbol: "MSFTc", weight: 25 },
+      { symbol: "GOOGLc", weight: 20 },
+      { symbol: "INTCc", weight: 15 },
+    ],
+  },
+  aicomp: {
+    name: "AI & Compute Frontier",
+    spendUsdc: 250,
+    legs: [
+      { symbol: "NVDAc", weight: 40 },
+      { symbol: "MSFTc", weight: 25 },
+      { symbol: "GOOGLc", weight: 20 },
+      { symbol: "INTCc", weight: 15 },
+    ],
+  },
+  "next-gen-mobility": {
+    name: "Next-Gen Tech & Mobility",
+    spendUsdc: 250,
+    legs: [
+      { symbol: "TSLAc", weight: 35 },
+      { symbol: "AMZNc", weight: 25 },
+      { symbol: "METAc", weight: 25 },
+      { symbol: "SPCXc", weight: 15 },
+    ],
+  },
+  nexus: {
+    name: "Next-Gen Tech & Mobility",
+    spendUsdc: 250,
+    legs: [
+      { symbol: "TSLAc", weight: 35 },
+      { symbol: "AMZNc", weight: 25 },
+      { symbol: "METAc", weight: 25 },
+      { symbol: "SPCXc", weight: 15 },
+    ],
+  },
+};
 
 /**
  * Encodes a basket to a base64url JSON string.
@@ -83,7 +268,7 @@ export function encodeBasketPayload(data: {
 }
 
 /**
- * Decodes and rigorously validates a base64url basket payload against official Coinbase stocks on Base.
+ * Decodes and rigorously validates a basket identifier (preset slug, custom slug, or base64url JSON) against official Coinbase stocks on Base.
  */
 export function decodeBasketPayload(raw: string): BasketValidationResult {
   if (!raw || typeof raw !== "string" || raw.trim().length === 0) {
@@ -94,13 +279,43 @@ export function decodeBasketPayload(raw: string): BasketValidationResult {
     };
   }
 
+  const trimmed = raw.trim();
+
+  // 1. Check if raw matches a known preset slug (e.g. "mag7", "big-tech", "crypto-equities", etc.)
+  const presetCandidate = KNOWN_PRESET_MAP[trimmed.toLowerCase()];
+  if (presetCandidate) {
+    const validatedLegs: ValidatedBasketLeg[] = presetCandidate.legs.map((leg) => {
+      const stock = STOCK_BY_SYMBOL[leg.symbol];
+      const address = getAddress(CB_STOCKS[leg.symbol]);
+      const usdcSlice = (presetCandidate.spendUsdc * leg.weight) / 100;
+      return {
+        stock,
+        address,
+        weight: leg.weight,
+        usdcSlice,
+      };
+    });
+
+    return {
+      isValid: true,
+      version: 1,
+      name: presetCandidate.name,
+      spendUsdc: presetCandidate.spendUsdc,
+      legs: validatedLegs,
+      payload: trimmed,
+    };
+  }
+
+  // 2. Check if raw matches a saved custom basket slug
+  const storedPayload = getCustomBasketPayload(trimmed);
+  const payloadToDecode = storedPayload || trimmed;
+
   let jsonStr = "";
   try {
-    const trimmed = raw.trim();
     if (typeof Buffer !== "undefined") {
-      jsonStr = Buffer.from(trimmed, "base64url").toString("utf-8");
+      jsonStr = Buffer.from(payloadToDecode, "base64url").toString("utf-8");
     } else {
-      let base64 = trimmed.replace(/-/g, "+").replace(/_/g, "/");
+      let base64 = payloadToDecode.replace(/-/g, "+").replace(/_/g, "/");
       while (base64.length % 4 !== 0) {
         base64 += "=";
       }
@@ -109,7 +324,7 @@ export function decodeBasketPayload(raw: string): BasketValidationResult {
   } catch {
     return {
       isValid: false,
-      error: "This link is not valid. Malformed payload encoding.",
+      error: `Basket "${trimmed}" not found or malformed.`,
       rawPayload: raw,
     };
   }
@@ -120,7 +335,7 @@ export function decodeBasketPayload(raw: string): BasketValidationResult {
   } catch {
     return {
       isValid: false,
-      error: "This link is not valid. Malformed JSON structure.",
+      error: `Basket "${trimmed}" has invalid structure.`,
       rawPayload: raw,
     };
   }
@@ -135,15 +350,16 @@ export function decodeBasketPayload(raw: string): BasketValidationResult {
 
   const obj = parsed as Record<string, unknown>;
 
-  // 1. Validate version (ignore unknown keys, accept v: 1)
+  // 1. Validate version
   const version = typeof obj.v === "number" ? obj.v : 1;
 
   // 2. Validate and sanitize name (strip HTML, cap 40 chars)
   const rawName = typeof obj.name === "string" ? obj.name : "Shareable Basket";
-  const cleanName = rawName
-    .replace(/<[^>]*>?/gm, "")
-    .trim()
-    .slice(0, 40) || "Shareable Basket";
+  const cleanName =
+    rawName
+      .replace(/<[^>]*>?/gm, "")
+      .trim()
+      .slice(0, 40) || "Shareable Basket";
 
   // 3. Validate spend USDC
   const spendNum = Number(obj.spendUsdc);
