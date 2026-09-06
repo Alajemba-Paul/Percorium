@@ -7,6 +7,7 @@ import {
   Coins,
   MessageSquare,
   KeyRound,
+  PieChart,
 } from "lucide-react";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { LandingPage } from "@/components/landing-page";
@@ -18,6 +19,9 @@ import { SlipstreamLpPanel } from "@/components/slipstream-lp-panel";
 import { HoldersChat } from "@/components/holders-chat";
 import { EligibilityChip } from "@/components/eligibility-banner";
 import { StockMark } from "@/components/stock-mark";
+import { CorporateActionsPanel } from "@/components/corporate-actions";
+import { BaseBuilderAttribution } from "@/components/base-builder-attribution";
+import { PortfolioLedger } from "@/components/portfolio-ledger";
 import {
   STOCKS,
   STOCK_BY_SYMBOL,
@@ -34,6 +38,7 @@ import type { StockPriceData } from "./types";
 export type ActiveTab =
   | "overview"
   | "desk"
+  | "portfolio"
   | "discover"
   | "slabs"
   | "lend"
@@ -162,6 +167,18 @@ export function App() {
             </button>
 
             <button
+              onClick={() => setActiveTab("portfolio")}
+              className={`flex items-center gap-1.5 shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                activeTab === "portfolio"
+                  ? "bg-[#cfd8c6] text-[#0c0d0b] shadow-sm"
+                  : "text-[#8f9388] hover:bg-[#1a1d18] hover:text-[#f1f0e8]"
+              }`}
+            >
+              <PieChart className="w-3.5 h-3.5" />
+              <span>Portfolio</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab("discover")}
               className={`flex items-center gap-1.5 shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
                 activeTab === "discover"
@@ -214,6 +231,9 @@ export function App() {
 
           {/* Right Action Group */}
           <div className="order-2 sm:order-3 flex items-center gap-2">
+            <div className="hidden md:block">
+              <BaseBuilderAttribution compact />
+            </div>
             <EligibilityChip />
             <button
               onClick={() => setWalletModalOpen(true)}
@@ -245,6 +265,7 @@ export function App() {
             onSelectStock={(symbol) => setSelectedSymbol(symbol as StockSymbol)}
             onLaunchTerminal={(tab) => {
               if (tab === "desk") setActiveTab("desk");
+              else if (tab === "portfolio") setActiveTab("portfolio");
               else if (tab === "discover") setActiveTab("discover");
               else if (tab === "slabs") setActiveTab("slabs");
               else if (tab === "lend") setActiveTab("lend");
@@ -350,7 +371,20 @@ export function App() {
             <div className="pt-2">
               <SlipstreamLpPanel stock={activeStock} />
             </div>
+
+            {/* Corporate Actions & DTC 1:1 Custody Transparency */}
+            <div className="pt-2">
+              <CorporateActionsPanel stock={activeStock} />
+            </div>
           </div>
+        )}
+
+        {/* Tab: Portfolio NAV & Asset Ledger */}
+        {activeTab === "portfolio" && (
+          <PortfolioLedger
+            onSelectStock={(sym) => setSelectedSymbol(sym)}
+            onNavigateTab={(tab) => setActiveTab(tab)}
+          />
         )}
 
         {/* Tab 3: Discover Board */}
@@ -549,6 +583,11 @@ export function App() {
             </div>
           </div>
         )}
+
+        {/* Global Base Builder Verification & Attribution */}
+        <div className="mt-12 pt-6 border-t border-[#262923]">
+          <BaseBuilderAttribution />
+        </div>
       </main>
 
       {/* Wallet Modal */}

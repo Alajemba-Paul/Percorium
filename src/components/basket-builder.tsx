@@ -520,6 +520,24 @@ export const BasketBuilder: React.FC<BasketBuilderProps> = ({
                   Share
                 </Button>
 
+                <a
+                  href={`https://warpcast.com/~/compose?text=${encodeURIComponent(`I just curated the ${name} tokenized equity basket on @base using Percorium! 🏛️\n\nTrade official Coinbase stocks with 1:1 DTC backing:`)}&embeds[]=${encodeURIComponent(shareableUrl)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="h-10 px-3 bg-[#7c65c1]/20 hover:bg-[#7c65c1]/30 text-[#d8b4fe] border border-[#7c65c1]/40 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shrink-0 cursor-pointer"
+                >
+                  <span>Warpcast</span>
+                </a>
+
+                <a
+                  href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`I just curated the ${name} stock basket on @base with @percorium! Trade Coinbase B20 tokenized equities onchain:`)}&url=${encodeURIComponent(shareableUrl)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="h-10 px-3 bg-[#1d9bf0]/20 hover:bg-[#1d9bf0]/30 text-[#7dd3fc] border border-[#1d9bf0]/40 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shrink-0 cursor-pointer"
+                >
+                  <span>X / Tweet</span>
+                </a>
+
                 <Button
                   asChild
                   variant="outline"

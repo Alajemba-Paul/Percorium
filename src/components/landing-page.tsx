@@ -23,7 +23,7 @@ interface LandingPageProps {
   priceBoard: StockPriceData[];
   selectedSymbol: string;
   onSelectStock: (symbol: string) => void;
-  onLaunchTerminal: (tab: 'desk' | 'discover' | 'slabs' | 'lend') => void;
+  onLaunchTerminal: (tab: 'desk' | 'discover' | 'slabs' | 'lend' | 'portfolio') => void;
   onOpenWalletModal: () => void;
   onConnectOnchainKit: (method: 'passkey' | 'google' | 'injected') => void;
   userAddress: string;
@@ -394,7 +394,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           What You Can Do
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div
             onClick={() => onLaunchTerminal('desk')}
             className="p-5 bg-[#131511] border border-[#262923] hover:border-[#cfd8c6]/40 rounded-xl space-y-3 cursor-pointer transition"
@@ -408,6 +408,23 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </p>
             <div className="text-xs text-[#cfd8c6] font-medium flex items-center gap-1 font-['IBM_Plex_Mono',monospace]">
               <span>Open Spot Desk</span>
+              <ArrowRight className="w-3 h-3" />
+            </div>
+          </div>
+
+          <div
+            onClick={() => onLaunchTerminal('portfolio')}
+            className="p-5 bg-[#131511] border border-[#262923] hover:border-[#cfd8c6]/40 rounded-xl space-y-3 cursor-pointer transition"
+          >
+            <div className="w-8 h-8 rounded-lg bg-[#1a1d18] border border-[#262923] flex items-center justify-center text-[#cfd8c6]">
+              <Coins className="w-4 h-4" />
+            </div>
+            <h4 className="text-base font-['Instrument_Serif',serif] text-[#f1f0e8]">Portfolio &amp; PnL Ledger</h4>
+            <p className="text-xs text-[#8f9388] leading-relaxed">
+              Track aggregate net asset value (NAV), real-time 24h PnL, sector allocation, and 1:1 DTC custody breakdown.
+            </p>
+            <div className="text-xs text-[#cfd8c6] font-medium flex items-center gap-1 font-['IBM_Plex_Mono',monospace]">
+              <span>View Portfolio</span>
               <ArrowRight className="w-3 h-3" />
             </div>
           </div>
@@ -434,7 +451,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             className="p-5 bg-[#131511] border border-[#262923] hover:border-[#cfd8c6]/40 rounded-xl space-y-3 cursor-pointer transition"
           >
             <div className="w-8 h-8 rounded-lg bg-[#1a1d18] border border-[#262923] flex items-center justify-center text-[#cfd8c6]">
-              <Coins className="w-4 h-4" />
+              <Zap className="w-4 h-4" />
             </div>
             <h4 className="text-base font-['Instrument_Serif',serif] text-[#f1f0e8]">Earn Fees (Aerodrome LP)</h4>
             <p className="text-xs text-[#8f9388] leading-relaxed">

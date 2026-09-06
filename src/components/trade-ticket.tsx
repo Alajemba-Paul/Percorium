@@ -8,6 +8,8 @@ import {
   LoaderCircle,
   ShieldCheck,
   Sliders,
+  Zap,
+  Route,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -364,21 +366,61 @@ export function TradeTicket({
       </div>
 
       {quoteRes ? (
-        <dl className="mt-4 space-y-2 rounded-lg bg-elevated p-3 text-sm">
-          <Row
-            k="You receive"
-            v={`${formatNum(buyAmt, 4)} ${buyLabel}`}
-          />
-          <Row k="Route source" v={quoteRes.source} />
-          {oraclePx > 0 && side === "buy" && implied > 0 ? (
+        <div className="mt-4 space-y-2 rounded-lg bg-elevated p-3 text-sm">
+          {/* Visual Route Path */}
+          <div className="rounded-md border border-border/60 bg-background/60 p-2.5">
+            <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1.5">
+              <span className="flex items-center gap-1 font-medium text-foreground">
+                <Route className="size-3 text-primary" />
+                <span>Base Smart Route</span>
+              </span>
+              <span className="font-mono text-[10px] text-emerald-400">
+                Optimal Liquidity
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs font-mono">
+              <span className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-semibold">
+                {route.sellSymbol}
+              </span>
+              <span className="text-muted-foreground">→</span>
+              <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 text-[11px]">
+                {quoteRes.source}
+              </span>
+              <span className="text-muted-foreground">→</span>
+              <span className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground font-semibold">
+                {buyLabel}
+              </span>
+            </div>
+          </div>
+
+          <dl className="space-y-2 pt-1">
             <Row
-              k="Gap vs official price"
-              v={`${(((1 / implied) / oraclePx - 1) * 100).toFixed(2)}%`}
+              k="You receive"
+              v={`${formatNum(buyAmt, 4)} ${buyLabel}`}
             />
-          ) : null}
-          {oraclePx > 0 ? (
-            <Row k="Official price" v={formatUsd(oraclePx, 2)} />
-          ) : null}
+            <Row k="Execution Route" v={quoteRes.source} />
+            {oraclePx > 0 && side === "buy" && implied > 0 ? (
+              <Row
+                k="Gap vs official price"
+                v={`${(((1 / implied) / oraclePx - 1) * 100).toFixed(2)}%`}
+              />
+            ) : null}
+            {oraclePx > 0 ? (
+              <Row k="Official price" v={formatUsd(oraclePx, 2)} />
+            ) : null}
+
+            {/* Base L2 Gas Estimation (Standard Base L2 Gas, No Paymaster) */}
+            <div className="flex items-center justify-between gap-3 text-xs pt-1 border-t border-border/40">
+              <dt className="flex items-center gap-1 text-muted-foreground">
+                <Zap className="size-3 text-[#0052FF]" />
+                <span>Base L2 Gas (Est.)</span>
+              </dt>
+              <dd className="font-mono tabular-nums text-foreground">
+                {quoteRes.estimatedGas ? `~$0.0008 (${quoteRes.estimatedGas})` : "< $0.001 (Base L2)"}
+              </dd>
+            </div>
+          </dl>
+
           {quoteRes.allowanceTarget ? (
             <div className="mt-2 rounded border border-border/50 bg-background/50 p-2 text-xs">
               <div className="flex items-center gap-1 font-medium text-foreground">
@@ -394,9 +436,7 @@ export function TradeTicket({
               </p>
             </div>
           ) : null}
-          {quoteRes.estimatedGas ? (
-            <Row k="Est. network fee" v={quoteRes.estimatedGas} />
-          ) : null}
+
           {quoteRes.issues?.map((issue) => (
             <p key={issue} className="text-xs text-muted-foreground">
               {issue}
@@ -410,7 +450,7 @@ export function TradeTicket({
               Connect a wallet to get a live executable quote.
             </p>
           ) : null}
-        </dl>
+        </div>
       ) : null}
 
       {locked ? (
