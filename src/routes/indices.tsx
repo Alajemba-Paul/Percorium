@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
+import { BasketBuilder } from "@/components/basket-builder";
 import { IndexWorkshop } from "@/components/index-workshop";
 import { WalletModal } from "@/components/wallet-modal";
 import { useStockBalances } from "@/hooks/use-balances";
@@ -38,15 +39,26 @@ function IndicesPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <IndexWorkshop
-        userEffectiveUsdc={balances.effectiveUsdc}
-        isConnected={isConnected}
-        onOpenWalletModal={() => setWalletModalOpen(true)}
-        onTradeStock={(_symbol: StockSymbol) => {
-          navigate({ to: "/swap" });
-        }}
-      />
+    <div className="space-y-8">
+      <BasketBuilder />
+
+      <div className="border-t border-border pt-6">
+        <h2 className="font-display text-2xl tracking-tight mb-2">
+          Pre-Curated Baskets & Slabs
+        </h2>
+        <p className="text-xs text-muted-foreground mb-4">
+          Pre-composed baskets using official Coinbase stock inventories.
+        </p>
+        <IndexWorkshop
+          userEffectiveUsdc={balances.effectiveUsdc}
+          isConnected={isConnected}
+          onOpenWalletModal={() => setWalletModalOpen(true)}
+          onTradeStock={(_symbol: StockSymbol) => {
+            navigate({ to: "/swap" });
+          }}
+        />
+      </div>
+
       <WalletModal
         isOpen={walletModalOpen}
         onClose={() => setWalletModalOpen(false)}
@@ -64,4 +76,5 @@ function IndicesPage() {
     </div>
   );
 }
+
 
