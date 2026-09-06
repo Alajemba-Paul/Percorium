@@ -76,3 +76,50 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+@keyframes ticker-slide {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes hero-fade-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes accent-line-draw {
+  0% {
+    width: 0%;
+  }
+  100% {
+    width: 100%;
+  }
+}
+
+.animate-ticker-slide {
+  display: flex;
+  width: max-content;
+  animation: ticker-slide 32s linear infinite;
+}
+
+.animate-ticker-slide:hover {
+  animation-play-state: paused;
+}
+
+.animate-hero-rise {
+  animation: hero-fade-rise 0.5s ease-out forwards;
+}
+
+.animate-accent-draw {
+  animation: accent-line-draw 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
