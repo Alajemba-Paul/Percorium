@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { ExternalLink } from "lucide-react";
 import { HoldersChat } from "@/components/holders-chat";
 import { LendPanel } from "@/components/lend-panel";
+import { LiquidityPanel } from "@/components/liquidity-panel";
 import { OfficialPriceBadge } from "@/components/official-price-badge";
 import { StockChart } from "@/components/StockChart";
 import { StockMark } from "@/components/stock-mark";
@@ -84,10 +85,12 @@ function StockPage() {
 
       <StockChart tokenAddress={stock.address} symbol={stock.symbol} />
 
-      <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+      <div className="grid gap-6 lg:grid-cols-2">
         <TradeTicket symbol={stock.symbol} quote={q} />
-        <LendPanel symbol={stock.symbol} assetAddress={stock.address} />
+        <LiquidityPanel symbol={stock.symbol} assetAddress={stock.address} />
       </div>
+
+      <LendPanel symbol={stock.symbol} assetAddress={stock.address} />
 
       <HoldersChat
         room={stock.symbol}

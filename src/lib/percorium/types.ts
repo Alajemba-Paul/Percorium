@@ -42,7 +42,7 @@ export type QuoteRequest = {
 
 export type QuoteResult = {
   ok: boolean;
-  source: "0x" | "1inch" | "aerodrome" | "oracle";
+  source: "0x" | "aerodrome" | "oracle";
   sellToken: `0x${string}`;
   buyToken: `0x${string}`;
   sellAmount: string;

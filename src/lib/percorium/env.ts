@@ -36,18 +36,6 @@ export function zeroExApiKey(): string | undefined {
   );
 }
 
-export function oneInchApiKey(): string | undefined {
-  return firstRuntimeEnv(
-    "ONEINCH_API_KEY",
-    "ONE_INCH_API_KEY",
-    "ONEINCH_DEV_API_KEY",
-  );
-}
-
 export function hasZeroExKey(): boolean {
   return Boolean(zeroExApiKey());
-}
-
-export function hasOneInchKey(): boolean {
-  return Boolean(oneInchApiKey());
 }

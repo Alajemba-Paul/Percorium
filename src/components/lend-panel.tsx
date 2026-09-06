@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { StockSymbol } from "@/lib/percorium/constants";
-import { STOCK_BY_SYMBOL, DEFAULT_INDEX_LTV_BPS } from "@/lib/percorium/constants";
+import { DEFAULT_INDEX_LTV_BPS } from "@/lib/percorium/constants";
 import { formatPct, formatUsd } from "@/lib/percorium/format";
 import { healthFactor, liquidationPriceUsdc } from "@/lib/percorium/nav";
 import { useEligibility, useMorpho, usePriceBoard, quoteMap } from "@/hooks/use-board";
@@ -60,34 +60,27 @@ export function LendPanel({
     return { hf, liq };
   }, [collat, debt, px, market]);
 
+  // If no Morpho Blue market exists for this exact B20, hide Morpho completely
+  if (!market) {
+    return null;
+  }
+
   return (
     <div className="rounded-xl bg-card p-5 shadow-border">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Landmark className="size-4 text-muted-foreground" />
-          <h2 className="font-display text-xl">Borrow</h2>
+          <Landmark className="size-4 text-primary" />
+          <h2 className="font-display text-xl">Morpho Blue Loan</h2>
         </div>
-        {market ? (
-          <Badge variant="live">Loan pool open</Badge>
-        ) : (
-          <Badge variant="outline">No loan pool yet</Badge>
-        )}
+        <Badge variant="live">Loan pool open</Badge>
       </div>
 
-      {market ? (
-        <dl className="mb-4 grid grid-cols-2 gap-3 text-sm">
-          <Stat k="Supply Rate" v={formatPct(market.supplyApy)} />
-          <Stat k="Borrow Rate" v={formatPct(market.borrowApy)} />
-          <Stat k="Max Loan" v={formatPct(market.lltv, 0)} />
-          <Stat k="Pool Funds" v={formatUsd(market.liquidity, 0)} />
-        </dl>
-      ) : (
-        <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
-          No loan market exists yet for{" "}
-          {isIndex ? symbol : STOCK_BY_SYMBOL[symbol as StockSymbol]?.company}{" "}
-          as collateral. You can still trade this stock, add it to baskets, and join the holders chat.
-        </p>
-      )}
+      <dl className="mb-4 grid grid-cols-2 gap-3 text-sm">
+        <Stat k="Supply Rate" v={formatPct(market.supplyApy)} />
+        <Stat k="Borrow Rate" v={formatPct(market.borrowApy)} />
+        <Stat k="Max Loan (LLTV)" v={formatPct(market.lltv, 0)} />
+        <Stat k="Pool Funds" v={formatUsd(market.liquidity, 0)} />
+      </dl>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div>

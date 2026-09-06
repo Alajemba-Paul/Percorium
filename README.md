@@ -32,7 +32,7 @@ NAV and LTV use Chainlink Coinbase equity total-return feeds (8 decimals, 24/5).
 
 1. **Discover** — official B20 names, Chainlink price, feed health, sequencer, DexScreener 24h change + basis dot.
 2. **Charts** — DexScreener embed of the deepest official USDC pair (Aerodrome preferred), GeckoTerminal toggle, 5m–1W timeframes, basis chip.
-3. **Buy / sell / swap** — 0x v2 primary, 1inch v6.1 fallback. Rejects any token not in the allowlist.
+3. **Buy / sell / swap** — 0x v2 primary, Aerodrome Slipstream fallback. Rejects any token not in the allowlist.
 4. **Index workshop** — compose weights, mint/redeem against Chainlink NAV. Solidity factory + slab in `contracts/`.
 5. **Credit** — Morpho market discovery at runtime. Hidden if no market. Isolated LTV. No cross-margin.
 6. **Holders chat** — gated on onchain `balanceOf`. Zero balance is rejected.
@@ -49,7 +49,7 @@ npm run dev
 
 Dev server: Vite + TanStack Start on port 8080. Production build is Nitro’s Vercel preset (`npm run build`).
 
-Without 0x / 1inch keys the ticket still quotes Chainlink-indicative size and **refuses to execute**.
+Without a 0x key the ticket falls back to Aerodrome Slipstream concentrated liquidity pools on Base.
 
 ## Environment variables
 
@@ -60,16 +60,15 @@ NEXT_PUBLIC_CDP_CLIENT_API_KEY
 NEXT_PUBLIC_WC_PROJECT_ID
 NEXT_PUBLIC_CHAIN=base
 ZERO_EX_API_KEY
-ONEINCH_API_KEY
 BASE_RPC
 CRON_SECRET
 ```
 
-The quote handler reads `ZERO_EX_API_KEY` / `ONEINCH_API_KEY` at request time (not build-time). The ticket lists `0x key: loaded` or `0x key: not in runtime env` so a missing runtime secret is obvious. Swap path: 0x → 1inch → Aerodrome V2 official USDC pool.
+The quote handler reads `ZERO_EX_API_KEY` at request time (not build-time). The ticket lists `0x key: loaded` or `0x key: not in runtime env` so a missing runtime secret is obvious. Swap path: 0x → Aerodrome Slipstream official USDC pool.
 
 ## Stack
 
-TanStack Start (Vite + Nitro), wagmi / viem, Base-only. Swap path 0x → 1inch. Prices via `AggregatorV3Interface.latestRoundData()`. Charts via DexScreener pair lookup (address, not ticker) + GeckoTerminal embed of the same pool.
+TanStack Start (Vite + Nitro), wagmi / viem, Base-only. Swap path 0x → Aerodrome Slipstream. Prices via `AggregatorV3Interface.latestRoundData()`. Charts via DexScreener pair lookup (address, not ticker) + GeckoTerminal embed of the same pool.
 
 ## Contracts
 

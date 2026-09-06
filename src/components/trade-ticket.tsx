@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import {
   ArrowDownUp,
   CircleAlert,
+  ExternalLink,
   LoaderCircle,
   ShieldCheck,
   Sliders,
@@ -23,7 +24,9 @@ import {
 import { ERC20_ABI } from "@/lib/percorium/abis";
 import {
   AERO_ROUTER,
-  ONEINCH_ROUTER_V6,
+  AERO_SLIPSTREAM_NFPM,
+  AERO_SLIPSTREAM_ROUTER,
+  AERO_UNIVERSAL_ROUTER,
   PERMIT2,
   STOCKS,
   STOCK_BY_SYMBOL,
@@ -40,16 +43,18 @@ import { useStockBalances } from "@/hooks/use-balances";
 import { cn } from "@/lib/utils";
 
 function decimalsFor(token: string) {
-  return token.toLowerCase() === USDC.toLowerCase() ? 6 : 18;
+  return token.toLowerCase() === USDC.toLowerCase() ? 6 : 8;
 }
 
 function spenderLabelFor(target?: string): string {
   if (!target) return "None";
   const lc = target.toLowerCase();
   if (lc === ZERO_EX_ALLOWANCE_HOLDER.toLowerCase()) return "0x AllowanceHolder";
+  if (lc === AERO_SLIPSTREAM_ROUTER.toLowerCase()) return "Aerodrome Slipstream Router";
+  if (lc === AERO_SLIPSTREAM_NFPM.toLowerCase()) return "Aerodrome Slipstream NFPM";
+  if (lc === AERO_UNIVERSAL_ROUTER.toLowerCase()) return "Aerodrome Universal Router";
   if (lc === AERO_ROUTER.toLowerCase()) return "Aerodrome Router";
   if (lc === PERMIT2.toLowerCase()) return "Uniswap Permit2";
-  if (lc === ONEINCH_ROUTER_V6.toLowerCase()) return "1inch Router V6";
   return "Unknown Spender";
 }
 
@@ -114,20 +119,22 @@ export function TradeTicket({
       return {
         sellToken: stock.address,
         buyToken: USDC,
-        sellDec: 18,
+        sellDec: 8,
         sellSymbol: stock.symbol,
       };
     }
     return {
       sellToken: stock.address,
       buyToken: STOCK_BY_SYMBOL[pair].address,
-      sellDec: 18,
+      sellDec: 8,
       sellSymbol: stock.symbol,
     };
   }, [side, stock.address, stock.symbol, pair]);
 
   const buyLabel =
     side === "buy" ? stock.symbol : side === "sell" ? "USDC" : pair;
+
+  const aerodromeSwapUrl = `https://aerodrome.finance/swap?from=USDC&to=${stock.address}`;
 
   async function onQuote() {
     setQuoting(true);
@@ -228,6 +235,15 @@ export function TradeTicket({
       <div className="mb-4 flex items-center justify-between">
         <h2 className="font-display text-xl">Trade Ticket</h2>
         <div className="flex items-center gap-2">
+          <a
+            href={aerodromeSwapUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1 font-mono text-xs text-muted-foreground hover:text-foreground"
+          >
+            Open on Aerodrome
+            <ExternalLink className="size-3" />
+          </a>
           <button
             type="button"
             onClick={() => setShowSlippageConfig(!showSlippageConfig)}
@@ -237,9 +253,6 @@ export function TradeTicket({
             <Sliders className="size-3" />
             <span>{(slippageBps / 100).toFixed(1)}%</span>
           </button>
-          <span className="font-mono text-[11px] text-muted-foreground">
-            0x · Aerodrome
-          </span>
         </div>
       </div>
 

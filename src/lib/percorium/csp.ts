@@ -33,7 +33,6 @@ export const PERCORIUM_CSP_DIRECTIVES: Record<string, string[]> = {
     "https://dd.dexscreener.com",
     "https://basescan.org",
     "https://og.grok.me",
-    "https://tokens.1inch.io",
   ],
   "connect-src": [
     "'self'",
@@ -53,8 +52,7 @@ export const PERCORIUM_CSP_DIRECTIVES: Record<string, string[]> = {
     "https://base-rpc.publicnode.com",
     "https://developer-access-mainnet.base.org",
     "https://base.drpc.org",
-    // Fallback DEX & Lending protocols
-    "https://api.1inch.com",
+    // Lending protocols
     "https://api.morpho.org",
     // Coinbase Wallet SDK Relays
     "https://*.coinbase.com",

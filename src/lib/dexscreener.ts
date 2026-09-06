@@ -20,10 +20,11 @@ export type DexPairView = {
 };
 
 type RawToken = { address?: string; symbol?: string; name?: string };
-type RawPair = {
+export type RawPair = {
   chainId?: string;
   dexId?: string;
   pairAddress?: string;
+  labels?: string[];
   priceUsd?: string | number;
   priceNative?: string | number;
   baseToken?: RawToken;
@@ -82,8 +83,46 @@ function usdcPairsForToken(pairs: RawPair[], token: string): RawPair[] {
   return pairs.filter((p) => {
     if ((p.chainId ?? "base").toLowerCase() !== "base") return false;
     if (!p.pairAddress) return false;
-    return sameAddr(p.baseToken?.address, lc) && sameAddr(p.quoteToken?.address, USDC_LC);
+    const isBase = sameAddr(p.baseToken?.address, lc) && sameAddr(p.quoteToken?.address, USDC_LC);
+    const isQuote = sameAddr(p.quoteToken?.address, lc) && sameAddr(p.baseToken?.address, USDC_LC);
+    return isBase || isQuote;
   });
+}
+
+/**
+ * Discovers the official Aerodrome Slipstream (concentrated liquidity) USDC pair for an official B20 token.
+ * Filters strictly for pairs on Base where:
+ * - baseToken is B20 and quoteToken is USDC (or vice versa)
+ * - dexId is aerodrome or labels include slipstream / cl
+ * Sorts by highest liquidity.usd.
+ */
+export async function fetchAerodromeSlipstreamUsdcPair(
+  token: string,
+): Promise<RawPair | null> {
+  const lc = token.toLowerCase();
+  if (!isOfficial(lc)) return null;
+  try {
+    const pairs = await fetchTokenPairs(lc);
+    const aeroUsdc = pairs.filter((p) => {
+      if ((p.chainId ?? "base").toLowerCase() !== "base") return false;
+      if (!p.pairAddress) return false;
+      const isBase = sameAddr(p.baseToken?.address, lc) && sameAddr(p.quoteToken?.address, USDC_LC);
+      const isQuote = sameAddr(p.quoteToken?.address, lc) && sameAddr(p.baseToken?.address, USDC_LC);
+      if (!isBase && !isQuote) return false;
+
+      const dex = (p.dexId ?? "").toLowerCase();
+      const labels = (p.labels ?? []).map((l) => String(l).toLowerCase());
+      const isAero =
+        dex.includes("aerodrome") ||
+        labels.some((l) => l.includes("slipstream") || l.includes("cl"));
+      return isAero;
+    });
+
+    aeroUsdc.sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0));
+    return aeroUsdc[0] ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function pickPair(pairs: RawPair[], token: string): DexPairView | null {

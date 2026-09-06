@@ -2,24 +2,20 @@ import { createServerFn } from "@tanstack/react-start";
 import {
   encodeFunctionData,
   getAddress,
-  parseUnits,
 } from "viem";
 import {
-  AERO_FACTORY,
-  AERO_ROUTER,
+  AERO_SLIPSTREAM_ROUTER,
   BASIS_REJECT_BPS,
   STOCK_BY_ADDRESS,
   USDC,
   ZERO_EX_ALLOWANCE_HOLDER,
 } from "./constants";
-
 import {
-  AERO_FACTORY_ABI,
-  AERO_PAIR_ABI,
-  AERO_ROUTER_ABI,
+  AERO_SLIPSTREAM_POOL_ABI,
+  AERO_SLIPSTREAM_ROUTER_ABI,
   AGGREGATOR_V3_ABI,
 } from "./abis";
-import { hasOneInchKey, hasZeroExKey, oneInchApiKey, zeroExApiKey } from "./env";
+import { hasZeroExKey, zeroExApiKey } from "./env";
 import { assertServerGeoNotUs } from "./geo.server";
 import { getPublicClient } from "./rpc";
 import {
@@ -29,12 +25,12 @@ import {
   assertZeroExTarget,
 } from "./security";
 import type { QuoteRequest, QuoteResult } from "./types";
+import { fetchAerodromeSlipstreamUsdcPair } from "../dexscreener";
 
 const ZERO_EX_VERSION = "v2";
 
 function tokenDecimals(addr: string): number {
-
-  return addr.toLowerCase() === USDC.toLowerCase() ? 6 : 18;
+  return addr.toLowerCase() === USDC.toLowerCase() ? 6 : 8;
 }
 
 function asAddr(addr: string): `0x${string}` {
@@ -158,6 +154,12 @@ async function quote0x(
       },
       signal: AbortSignal.timeout(12_000),
     });
+
+    // 0x 422 BUY_TOKEN_NOT_AUTHORIZED_FOR_TRADE / SELL_TOKEN_NOT_AUTHORIZED_FOR_TRADE: skip silently
+    if (res.status === 422) {
+      return { quote: null, note: "" };
+    }
+
     const json = await readJson(res);
     if (!res.ok) {
       return { quote: null, note: `0x ${res.status}: ${errMsg(json, res.status)}` };
@@ -178,227 +180,252 @@ async function quote0x(
   }
 }
 
-async function quote1inch(
+/**
+ * Builds an Aerodrome Slipstream (concentrated liquidity) swap.
+ * Discovers the pool from DexScreener for that exact token.
+ * Reads pool state onchain (token0, token1, tickSpacing, slot0) and encodes exactInputSingle.
+ */
+async function quoteAerodromeSlipstream(
   req: QuoteRequest,
   slippageBps: number,
 ): Promise<RouterAttempt> {
-  const key = oneInchApiKey();
-  if (!key) return { quote: null, note: "1inch key missing in runtime env" };
+  const sellLc = req.sellToken.toLowerCase();
+  const buyLc = req.buyToken.toLowerCase();
+  const usdcLc = USDC.toLowerCase();
 
-  const taker = isRealTaker(req.taker) ? req.taker : undefined;
-  const path = taker ? "swap" : "quote";
-  const url = new URL(`https://api.1inch.com/swap/v6.1/8453/${path}`);
-  url.searchParams.set("src", asAddr(req.sellToken));
-  url.searchParams.set("dst", asAddr(req.buyToken));
-  url.searchParams.set("amount", req.sellAmount);
-  url.searchParams.set("slippage", (slippageBps / 100).toFixed(2));
-  if (taker) {
-    url.searchParams.set("from", asAddr(taker));
-    url.searchParams.set("disableEstimate", "true");
-  }
+  const isSellUsdc = sellLc === usdcLc;
+  const isBuyUsdc = buyLc === usdcLc;
 
-  try {
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${key}`,
-        accept: "application/json",
-      },
-      signal: AbortSignal.timeout(12_000),
-    });
-    const json = await readJson(res);
-    if (!res.ok) {
+  // Single-hop trade: USDC <-> B20
+  if (isSellUsdc || isBuyUsdc) {
+    const stockAddr = isSellUsdc ? req.buyToken : req.sellToken;
+    const pair = await fetchAerodromeSlipstreamUsdcPair(stockAddr);
+    if (!pair || !pair.pairAddress) {
       return {
         quote: null,
-        note: `1inch ${res.status}: ${errMsg(json, res.status)}`,
+        note: "No official USDC pool for this stock yet. You cannot buy or sell here.",
       };
     }
-    const buyAmount =
-      (typeof json.dstAmount === "string" && json.dstAmount) ||
-      (typeof json.toAmount === "string" && json.toAmount) ||
-      null;
-    if (!buyAmount) return { quote: null, note: "1inch: empty dstAmount" };
-    const tx = json.tx as
-      | { to?: string; data?: string; value?: string; gas?: number }
-      | undefined;
 
-    // Security: Validate 1inch router execution target
-    if (tx?.to) {
-      try {
-        assertZeroExTarget(tx.to, tx.to);
-      } catch {
-        return { quote: null, note: "1inch: untrusted execution target" };
+    try {
+      const client = getPublicClient();
+      const poolAddr = asAddr(pair.pairAddress);
+
+      const [token0, _token1, tickSpacing, slot0] = await Promise.all([
+        client.readContract({
+          address: poolAddr,
+          abi: AERO_SLIPSTREAM_POOL_ABI,
+          functionName: "token0",
+        }),
+        client.readContract({
+          address: poolAddr,
+          abi: AERO_SLIPSTREAM_POOL_ABI,
+          functionName: "token1",
+        }),
+        client.readContract({
+          address: poolAddr,
+          abi: AERO_SLIPSTREAM_POOL_ABI,
+          functionName: "tickSpacing",
+        }),
+        client.readContract({
+          address: poolAddr,
+          abi: AERO_SLIPSTREAM_POOL_ABI,
+          functionName: "slot0",
+        }),
+      ]);
+
+      const sqrtPriceX96 = BigInt(slot0[0]);
+      if (sqrtPriceX96 === 0n) {
+        return { quote: null, note: "Aerodrome Slipstream: uninitialized pool" };
       }
+
+      const sellRaw = BigInt(req.sellAmount);
+      let buyRaw: bigint;
+
+      const token0IsUsdc = token0.toLowerCase() === usdcLc;
+
+      if (isSellUsdc) {
+        // Selling USDC to buy B20
+        if (token0IsUsdc) {
+          // token0 = USDC, token1 = B20
+          // sqrtPriceX96 = sqrt(B20_raw / USDC_raw)
+          // buyRaw = sellRaw * (sqrtPriceX96^2) / 2^192
+          buyRaw = (sellRaw * sqrtPriceX96 * sqrtPriceX96) / (2n ** 192n);
+        } else {
+          // token0 = B20, token1 = USDC
+          // sqrtPriceX96 = sqrt(USDC_raw / B20_raw)
+          // buyRaw = sellRaw * 2^192 / (sqrtPriceX96^2)
+          buyRaw = (sellRaw * (2n ** 192n)) / (sqrtPriceX96 * sqrtPriceX96);
+        }
+      } else {
+        // Selling B20 to buy USDC
+        if (token0IsUsdc) {
+          // token0 = USDC, token1 = B20
+          // sqrtPriceX96 = sqrt(B20_raw / USDC_raw)
+          // buyRaw = sellRaw * 2^192 / (sqrtPriceX96^2)
+          buyRaw = (sellRaw * (2n ** 192n)) / (sqrtPriceX96 * sqrtPriceX96);
+        } else {
+          // token0 = B20, token1 = USDC
+          // sqrtPriceX96 = sqrt(USDC_raw / B20_raw)
+          // buyRaw = sellRaw * (sqrtPriceX96^2) / 2^192
+          buyRaw = (sellRaw * sqrtPriceX96 * sqrtPriceX96) / (2n ** 192n);
+        }
+      }
+
+      if (buyRaw <= 0n) {
+        return { quote: null, note: "Aerodrome Slipstream: zero output" };
+      }
+
+      const minBuyAmount = (buyRaw * BigInt(10_000 - slippageBps)) / 10_000n;
+      const taker = isRealTaker(req.taker) ? asAddr(req.taker) : undefined;
+
+      let to: `0x${string}` | undefined;
+      let data: `0x${string}` | undefined;
+
+      if (taker) {
+        to = AERO_SLIPSTREAM_ROUTER;
+        data = encodeFunctionData({
+          abi: AERO_SLIPSTREAM_ROUTER_ABI,
+          functionName: "exactInputSingle",
+          args: [
+            {
+              tokenIn: asAddr(req.sellToken),
+              tokenOut: asAddr(req.buyToken),
+              tickSpacing,
+              recipient: taker,
+              deadline: BigInt(Math.floor(Date.now() / 1000) + 1200),
+              amountIn: sellRaw,
+              amountOutMinimum: minBuyAmount,
+              sqrtPriceLimitX96: 0n,
+            },
+          ],
+        });
+
+        assertZeroExTarget(to, AERO_SLIPSTREAM_ROUTER);
+      }
+
+      return {
+        quote: {
+          ok: true,
+          source: "aerodrome",
+          sellToken: req.sellToken,
+          buyToken: req.buyToken,
+          sellAmount: req.sellAmount,
+          buyAmount: buyRaw.toString(),
+          minBuyAmount: minBuyAmount.toString(),
+          price: "0",
+          to,
+          data,
+          value: "0",
+          allowanceTarget: data ? AERO_SLIPSTREAM_ROUTER : undefined,
+          executable: Boolean(to && data),
+          issues: data
+            ? ["Aerodrome Slipstream official pool"]
+            : ["Aerodrome Slipstream price (connect wallet for calldata)"],
+        },
+        note: "Aerodrome Slipstream official pool",
+      };
+    } catch (err) {
+      return {
+        quote: null,
+        note: `Aerodrome Slipstream error: ${err instanceof Error ? err.message : "query failed"}`,
+      };
     }
+  }
+
+  // Stock-to-stock swap: Stock A -> USDC -> Stock B
+  try {
+    const [pairA, pairB] = await Promise.all([
+      fetchAerodromeSlipstreamUsdcPair(req.sellToken),
+      fetchAerodromeSlipstreamUsdcPair(req.buyToken),
+    ]);
+
+    if (!pairA?.pairAddress || !pairB?.pairAddress) {
+      return {
+        quote: null,
+        note: "No official USDC pool for this stock yet. You cannot buy or sell here.",
+      };
+    }
+
+    const client = getPublicClient();
+    const [slot0A, token0A, slot0B, token0B] = await Promise.all([
+      client.readContract({
+        address: asAddr(pairA.pairAddress),
+        abi: AERO_SLIPSTREAM_POOL_ABI,
+        functionName: "slot0",
+      }),
+      client.readContract({
+        address: asAddr(pairA.pairAddress),
+        abi: AERO_SLIPSTREAM_POOL_ABI,
+        functionName: "token0",
+      }),
+      client.readContract({
+        address: asAddr(pairB.pairAddress),
+        abi: AERO_SLIPSTREAM_POOL_ABI,
+        functionName: "slot0",
+      }),
+      client.readContract({
+        address: asAddr(pairB.pairAddress),
+        abi: AERO_SLIPSTREAM_POOL_ABI,
+        functionName: "token0",
+      }),
+    ]);
+
+    const sqrtA = BigInt(slot0A[0]);
+    const sqrtB = BigInt(slot0B[0]);
+    if (sqrtA === 0n || sqrtB === 0n) {
+      return { quote: null, note: "Aerodrome Slipstream: uninitialized pool" };
+    }
+
+    const sellRaw = BigInt(req.sellAmount);
+
+    // Hop 1: Sell Stock A for USDC
+    const token0AIsUsdc = token0A.toLowerCase() === usdcLc;
+    const usdcIntermediate = token0AIsUsdc
+      ? (sellRaw * (2n ** 192n)) / (sqrtA * sqrtA)
+      : (sellRaw * sqrtA * sqrtA) / (2n ** 192n);
+
+    if (usdcIntermediate <= 0n) {
+      return { quote: null, note: "Aerodrome Slipstream: zero intermediate output" };
+    }
+
+    // Hop 2: Buy Stock B with USDC
+    const token0BIsUsdc = token0B.toLowerCase() === usdcLc;
+    const buyRaw = token0BIsUsdc
+      ? (usdcIntermediate * sqrtB * sqrtB) / (2n ** 192n)
+      : (usdcIntermediate * (2n ** 192n)) / (sqrtB * sqrtB);
+
+    if (buyRaw <= 0n) {
+      return { quote: null, note: "Aerodrome Slipstream: zero final output" };
+    }
+
+    const minBuyAmount = (buyRaw * BigInt(10_000 - slippageBps)) / 10_000n;
 
     return {
       quote: {
         ok: true,
-        source: "1inch",
+        source: "aerodrome",
         sellToken: req.sellToken,
         buyToken: req.buyToken,
         sellAmount: req.sellAmount,
-        buyAmount,
+        buyAmount: buyRaw.toString(),
+        minBuyAmount: minBuyAmount.toString(),
         price: "0",
-        estimatedGas: tx?.gas ? String(tx.gas) : undefined,
-        to: tx?.to as `0x${string}` | undefined,
-        data: tx?.data as `0x${string}` | undefined,
-        value: tx?.value ?? "0",
-        allowanceTarget: (tx?.to ?? undefined) as `0x${string}` | undefined,
-        executable: Boolean(tx?.to && tx?.data),
+        to: undefined,
+        data: undefined,
+        value: "0",
+        allowanceTarget: undefined,
+        executable: false,
+        issues: ["Aerodrome Slipstream multi-hop indicative route"],
       },
-      note: taker ? "1inch swap" : "1inch quote",
+      note: "Aerodrome Slipstream multi-hop",
     };
   } catch (err) {
     return {
       quote: null,
-      note: `1inch network: ${err instanceof Error ? err.message : "fetch failed"}`,
+      note: `Aerodrome Slipstream error: ${err instanceof Error ? err.message : "query failed"}`,
     };
   }
-}
-
-type AeroRoute = {
-  from: `0x${string}`;
-  to: `0x${string}`;
-  stable: boolean;
-  factory: `0x${string}`;
-};
-
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
-const MIN_USDC_RESERVE = 200n * 1_000_000n; // 200 USDC
-
-async function aeroUsdcReserve(token: string): Promise<bigint | null> {
-  const client = getPublicClient();
-  const pool = await client.readContract({
-    address: AERO_FACTORY,
-    abi: AERO_FACTORY_ABI,
-    functionName: "getPool",
-    args: [asAddr(token), asAddr(USDC), false],
-  });
-  if (!pool || pool.toLowerCase() === ZERO_ADDRESS) return null;
-  const [token0, reserves] = await Promise.all([
-    client.readContract({ address: pool, abi: AERO_PAIR_ABI, functionName: "token0" }),
-    client.readContract({ address: pool, abi: AERO_PAIR_ABI, functionName: "getReserves" }),
-  ]);
-  const usdcIs0 = token0.toLowerCase() === USDC.toLowerCase();
-  return usdcIs0 ? reserves[0] : reserves[1];
-}
-
-function hop(from: string, to: string): AeroRoute {
-  return {
-    from: asAddr(from),
-    to: asAddr(to),
-    stable: false,
-    factory: AERO_FACTORY,
-  };
-}
-
-async function quoteAerodrome(
-  req: QuoteRequest,
-  slippageBps: number,
-): Promise<RouterAttempt> {
-  const sell = req.sellToken.toLowerCase();
-  const buy = req.buyToken.toLowerCase();
-  const usdc = USDC.toLowerCase();
-
-  const routes: AeroRoute[] = [];
-  try {
-    if (sell === usdc || buy === usdc) {
-      const stock = sell === usdc ? req.buyToken : req.sellToken;
-      const reserve = await aeroUsdcReserve(stock);
-      if (reserve == null) {
-        return { quote: null, note: "Aerodrome V2: no USDC pool" };
-      }
-      if (reserve < MIN_USDC_RESERVE) {
-        return {
-          quote: null,
-          note: `Aerodrome V2 pool too thin (${reserve.toString()} USDC raw)`,
-        };
-      }
-      routes.push(hop(req.sellToken, req.buyToken));
-    } else {
-      const [a, b] = await Promise.all([
-        aeroUsdcReserve(req.sellToken),
-        aeroUsdcReserve(req.buyToken),
-      ]);
-      if (a == null || b == null) {
-        return { quote: null, note: "Aerodrome V2: missing USDC pool for a leg" };
-      }
-      if (a < MIN_USDC_RESERVE || b < MIN_USDC_RESERVE) {
-        return { quote: null, note: "Aerodrome V2: a hop is too thin" };
-      }
-      routes.push(hop(req.sellToken, USDC), hop(USDC, req.buyToken));
-    }
-  } catch (err) {
-    return {
-      quote: null,
-      note: `Aerodrome pool lookup: ${err instanceof Error ? err.message : "revert"}`,
-    };
-  }
-
-  const client = getPublicClient();
-  let amounts: readonly bigint[];
-  try {
-    amounts = await client.readContract({
-      address: AERO_ROUTER,
-      abi: AERO_ROUTER_ABI,
-      functionName: "getAmountsOut",
-      args: [BigInt(req.sellAmount), routes],
-    });
-  } catch (err) {
-    return {
-      quote: null,
-      note: `Aerodrome getAmountsOut: ${err instanceof Error ? err.message : "revert"}`,
-    };
-  }
-  const buyRaw = amounts[amounts.length - 1];
-  if (!buyRaw || buyRaw === 0n) {
-    return { quote: null, note: "Aerodrome: zero output" };
-  }
-  const minOut = (buyRaw * BigInt(10_000 - slippageBps)) / 10_000n;
-  const taker = isRealTaker(req.taker) ? asAddr(req.taker) : undefined;
-  let to: `0x${string}` | undefined;
-  let data: `0x${string}` | undefined;
-  if (taker) {
-    to = AERO_ROUTER;
-    data = encodeFunctionData({
-      abi: AERO_ROUTER_ABI,
-      functionName: "swapExactTokensForTokens",
-      args: [
-        BigInt(req.sellAmount),
-        minOut,
-        routes,
-        taker,
-        BigInt(Math.floor(Date.now() / 1000) + 20 * 60),
-      ],
-    });
-  }
-
-  // Security: verify target against trusted routers
-  if (to) {
-    assertZeroExTarget(to, AERO_ROUTER);
-  }
-
-  return {
-    quote: {
-      ok: true,
-      source: "aerodrome",
-      sellToken: req.sellToken,
-      buyToken: req.buyToken,
-      sellAmount: req.sellAmount,
-      buyAmount: buyRaw.toString(),
-      minBuyAmount: minOut.toString(),
-      price: "0",
-      to,
-      data,
-      value: "0",
-      allowanceTarget: data ? AERO_ROUTER : undefined,
-      executable: Boolean(to && data),
-      issues: data
-        ? ["Aerodrome official USDC pool"]
-        : ["Aerodrome price (connect wallet for calldata)"],
-    },
-    note: "Aerodrome official USDC pool",
-  };
 }
 
 export const fetchSwapQuote = createServerFn({ method: "POST" })
@@ -481,9 +508,6 @@ export const fetchSwapQuote = createServerFn({ method: "POST" })
     issues.push(
       hasZeroExKey() ? "0x key: loaded" : "0x key: not in runtime env",
     );
-    issues.push(
-      hasOneInchKey() ? "1inch key: loaded" : "1inch key: not in runtime env",
-    );
 
     const safeReq: QuoteRequest = {
       ...data,
@@ -493,10 +517,17 @@ export const fetchSwapQuote = createServerFn({ method: "POST" })
       slippageBps,
     };
 
+    // New Router Order:
+    // 1) Try 0x AllowanceHolder quote, chainId 8453, official addresses only.
+    //    If HTTP 200 and calldata present -> use it.
+    //    If 422 authorized-for-trade -> skip 0x silently.
+    // 2) Else build an Aerodrome Slipstream swap (CL / "aerodrome-slipstream").
+    // 3) If DexScreener finds no USDC pool -> disable execution with plain copy.
     const attempts: RouterAttempt[] = [];
     attempts.push(await quote0x(safeReq, slippageBps));
-    if (!attempts.some((a) => a.quote)) attempts.push(await quote1inch(safeReq, slippageBps));
-    if (!attempts.some((a) => a.quote)) attempts.push(await quoteAerodrome(safeReq, slippageBps));
+    if (!attempts.some((a) => a.quote)) {
+      attempts.push(await quoteAerodromeSlipstream(safeReq, slippageBps));
+    }
 
     for (const attempt of attempts) {
       if (attempt.note) issues.push(attempt.note);
@@ -512,61 +543,44 @@ export const fetchSwapQuote = createServerFn({ method: "POST" })
       oraclePx(pair.buyToken),
     ]);
 
-    if (!sellPx || !buyPx) {
-      return {
-        ok: false,
-        source: "oracle",
-        sellToken: pair.sellToken,
-        buyToken: pair.buyToken,
-        sellAmount: data.sellAmount,
-        buyAmount: "0",
-        price: "0",
-        error: "Missing Chainlink price for pair.",
-        issues,
-      };
-    }
-
-    const oracleBuy = (sellUnits * sellPx) / buyPx;
-    const oracleBuyRaw = parseUnits(oracleBuy.toFixed(buyDec), buyDec).toString();
-
     if (live) {
       const ammBuy = Number(live.buyAmount) / 10 ** buyDec;
-      const bps = Math.round(((ammBuy - oracleBuy) / oracleBuy) * 10_000);
       const tagged = {
         ...live,
         price: sellUnits > 0 ? (ammBuy / sellUnits).toString() : "0",
-        issues: [...issues, ...(live.issues ?? []), `basis ${bps} bps vs Chainlink`],
       };
-      if (Math.abs(bps) > BASIS_REJECT_BPS) {
-        return {
-          ...tagged,
-          ok: false,
-          executable: false,
-          error: "AMM quote deviates too far from the Chainlink risk price.",
-        };
+
+      if (sellPx && buyPx) {
+        const oracleBuy = (sellUnits * sellPx) / buyPx;
+        const bps = Math.round(((ammBuy - oracleBuy) / oracleBuy) * 10_000);
+        tagged.issues = [...issues, ...(live.issues ?? []), `basis ${bps} bps vs Chainlink`];
+
+        if (Math.abs(bps) > BASIS_REJECT_BPS) {
+          return {
+            ...tagged,
+            ok: false,
+            executable: false,
+            error: "AMM quote deviates too far from the Chainlink risk price.",
+          };
+        }
+      } else {
+        tagged.issues = [...issues, ...(live.issues ?? [])];
       }
+
       return tagged;
     }
 
-    const keyless = !hasZeroExKey() && !hasOneInchKey();
-    issues.push(
-      keyless
-        ? "No 0x/1inch key in the server runtime — showing Chainlink-indicative size."
-        : "Routers returned no route — showing Chainlink-indicative size. Execution is disabled.",
-    );
+    // No live route found: disable execution and show plain message
     return {
       ok: false,
       source: "oracle",
       sellToken: pair.sellToken,
       buyToken: pair.buyToken,
       sellAmount: data.sellAmount,
-      buyAmount: oracleBuyRaw,
-      price: sellUnits > 0 ? (oracleBuy / sellUnits).toString() : "0",
+      buyAmount: "0",
+      price: "0",
       executable: false,
       issues,
-      error: keyless
-        ? "Live router quote unavailable. Set ZERO_EX_API_KEY on the server runtime (not only at build) and redeploy."
-        : "0x/1inch/Aerodrome had no executable route for this pair.",
+      error: "No official USDC pool for this stock yet. You cannot buy or sell here.",
     };
   });
-

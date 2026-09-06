@@ -1,8 +1,10 @@
 import { getAddress, isAddress } from "viem";
 import {
   AERO_ROUTER,
+  AERO_SLIPSTREAM_NFPM,
+  AERO_SLIPSTREAM_ROUTER,
+  AERO_UNIVERSAL_ROUTER,
   ALLOWED_TRADE_TOKENS,
-  ONEINCH_ROUTER_V6,
   PERMIT2,
   RESTRICTED_COUNTRIES,
   STOCK_BY_ADDRESS,
@@ -21,8 +23,10 @@ import type { FeedStatus, SequencerState } from "./types";
 export const TRUSTED_ROUTERS_AND_SPENDERS = new Set<string>([
   getAddress(ZERO_EX_ALLOWANCE_HOLDER).toLowerCase(),
   getAddress(PERMIT2).toLowerCase(),
+  getAddress(AERO_SLIPSTREAM_ROUTER).toLowerCase(),
+  getAddress(AERO_SLIPSTREAM_NFPM).toLowerCase(),
+  getAddress(AERO_UNIVERSAL_ROUTER).toLowerCase(),
   getAddress(AERO_ROUTER).toLowerCase(),
-  getAddress(ONEINCH_ROUTER_V6).toLowerCase(),
 ]);
 
 /**
@@ -152,7 +156,7 @@ export function assertZeroExTarget(
     const checksummedTo = getAddress(to).toLowerCase();
     if (!TRUSTED_ROUTERS_AND_SPENDERS.has(checksummedTo)) {
       throw new Error(
-        `Security violation: Untrusted execution target ${to}. Must be 0x AllowanceHolder, Permit2, 1inch, or Aerodrome.`,
+        `Security violation: Untrusted execution target ${to}. Must be 0x AllowanceHolder, Permit2, or Aerodrome.`,
       );
     }
   }
