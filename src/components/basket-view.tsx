@@ -27,7 +27,9 @@ import {
 import {
   AERO_SLIPSTREAM_ROUTER,
   USDC,
+  type StockMeta,
 } from "@/lib/percorium/constants";
+import { SlipstreamLpPanel } from "@/components/slipstream-lp-panel";
 import {
   decodeBasketPayload,
   type ValidatedBasket,
@@ -78,6 +80,13 @@ export function BasketView({ payload }: { payload: string }) {
   const [spendUsdcInput, setSpendUsdcInput] = useState<string>(
     basket ? basket.spendUsdc.toString() : "250",
   );
+  const [selectedLpStock, setSelectedLpStock] = useState<StockMeta | null>(null);
+
+  useEffect(() => {
+    if (basket && basket.legs.length > 0) {
+      setSelectedLpStock(basket.legs[0].stock);
+    }
+  }, [basket]);
 
   useEffect(() => {
     if (basket) {
@@ -821,6 +830,39 @@ export function BasketView({ payload }: { payload: string }) {
           </div>
         </div>
       </div>
+
+      {/* Aerodrome Slipstream LP for Basket Constituent Stocks */}
+      {selectedLpStock && (
+        <div className="space-y-4 pt-4 border-t border-border/60">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h2 className="font-display text-2xl text-foreground">Earn Fees on Basket Stocks</h2>
+              <p className="text-xs text-muted-foreground">
+                Provide concentrated liquidity for basket constituent assets on Aerodrome Slipstream to earn swap fees.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              {basket.legs.map((leg) => (
+                <button
+                  key={leg.stock.symbol}
+                  type="button"
+                  onClick={() => setSelectedLpStock(leg.stock)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-mono font-medium transition cursor-pointer ${
+                    selectedLpStock.symbol === leg.stock.symbol
+                      ? "bg-primary text-primary-foreground shadow-xs font-bold"
+                      : "bg-elevated text-muted-foreground hover:text-foreground border border-border/50"
+                  }`}
+                >
+                  {leg.stock.symbol} ({leg.weight}%)
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <SlipstreamLpPanel stock={selectedLpStock} />
+        </div>
+      )}
     </div>
   );
 }

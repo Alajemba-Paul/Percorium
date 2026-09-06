@@ -157,6 +157,20 @@ export const AERO_SLIPSTREAM_ROUTER_ABI = [
   },
 ] as const;
 
+export const AERO_SLIPSTREAM_FACTORY_ABI = [
+  {
+    type: "function",
+    name: "getPool",
+    stateMutability: "view",
+    inputs: [
+      { name: "tokenA", type: "address" },
+      { name: "tokenB", type: "address" },
+      { name: "tickSpacing", type: "int24" },
+    ],
+    outputs: [{ name: "", type: "address" }],
+  },
+] as const;
+
 export const AERO_SLIPSTREAM_POOL_ABI = [
   {
     type: "function",
@@ -203,6 +217,23 @@ export const AERO_SLIPSTREAM_POOL_ABI = [
 ] as const;
 
 export const AERO_SLIPSTREAM_NFPM_ABI = [
+  {
+    type: "function",
+    name: "balanceOf",
+    stateMutability: "view",
+    inputs: [{ name: "owner", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "tokenOfOwnerByIndex",
+    stateMutability: "view",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "index", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "uint256" }],
+  },
   {
     type: "function",
     name: "mint",
@@ -257,6 +288,56 @@ export const AERO_SLIPSTREAM_NFPM_ABI = [
       { name: "amount0", type: "uint256" },
       { name: "amount1", type: "uint256" },
     ],
+  },
+  {
+    type: "function",
+    name: "decreaseLiquidity",
+    stateMutability: "payable",
+    inputs: [
+      {
+        name: "params",
+        type: "tuple",
+        components: [
+          { name: "tokenId", type: "uint256" },
+          { name: "liquidity", type: "uint128" },
+          { name: "amount0Min", type: "uint256" },
+          { name: "amount1Min", type: "uint256" },
+          { name: "deadline", type: "uint256" },
+        ],
+      },
+    ],
+    outputs: [
+      { name: "amount0", type: "uint256" },
+      { name: "amount1", type: "uint256" },
+    ],
+  },
+  {
+    type: "function",
+    name: "collect",
+    stateMutability: "payable",
+    inputs: [
+      {
+        name: "params",
+        type: "tuple",
+        components: [
+          { name: "tokenId", type: "uint256" },
+          { name: "recipient", type: "address" },
+          { name: "amount0Max", type: "uint128" },
+          { name: "amount1Max", type: "uint128" },
+        ],
+      },
+    ],
+    outputs: [
+      { name: "amount0", type: "uint256" },
+      { name: "amount1", type: "uint256" },
+    ],
+  },
+  {
+    type: "function",
+    name: "burn",
+    stateMutability: "payable",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [],
   },
   {
     type: "function",

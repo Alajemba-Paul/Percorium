@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { HoldersChat } from "@/components/holders-chat";
 import { IndexNavCard } from "@/components/StockChart";
-import { LendPanel } from "@/components/lend-panel";
 import { StockMark } from "@/components/stock-mark";
 import { getSlab, mintSlab, redeemSlab } from "@/lib/percorium/indices";
 import {
@@ -201,14 +200,6 @@ function IndexPage() {
           </Button>
         </div>
       </div>
-
-      <LendPanel
-        symbol={slab.symbol}
-        assetAddress={"0x0000000000000000000000000000000000000000"}
-        isIndex
-        nav={nav}
-        shares={slab.supply}
-      />
 
       <HoldersChat
         room={`index:${slab.id}`}

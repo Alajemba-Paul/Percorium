@@ -14,6 +14,7 @@ import { WalletModal } from "@/components/wallet-modal";
 import { StockChart } from "@/components/StockChart";
 import { TradeTicket } from "@/components/trade-ticket";
 import { LendPanel } from "@/components/lend-panel";
+import { SlipstreamLpPanel } from "@/components/slipstream-lp-panel";
 import { HoldersChat } from "@/components/holders-chat";
 import { EligibilityChip } from "@/components/eligibility-banner";
 import { StockMark } from "@/components/stock-mark";
@@ -23,7 +24,7 @@ import {
   type StockSymbol,
 } from "@/lib/percorium/constants";
 import { shortAddress } from "@/lib/percorium/format";
-import { useDexBoard, usePriceBoard, quoteMap } from "@/hooks/use-board";
+import { useDexBoard, usePriceBoard, useMorpho, quoteMap } from "@/hooks/use-board";
 import { useStockBalances } from "@/hooks/use-balances";
 import { BasketBuilder } from "@/components/basket-builder";
 import { PresetIndices } from "@/components/preset-indices";
@@ -54,6 +55,9 @@ export function App() {
   const board = usePriceBoard();
   const dex = useDexBoard();
   const balances = useStockBalances();
+  const morpho = useMorpho();
+
+  const hasLiveMorphoMarkets = (morpho.data?.markets ?? []).length > 0;
 
   const quotes = useMemo(
     () => quoteMap(board.data?.stocks),
@@ -181,17 +185,19 @@ export function App() {
               <span>Baskets</span>
             </button>
 
-            <button
-              onClick={() => setActiveTab("lend")}
-              className={`flex items-center gap-1.5 shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
-                activeTab === "lend"
-                  ? "bg-[#cfd8c6] text-[#0c0d0b] shadow-sm"
-                  : "text-[#8f9388] hover:bg-[#1a1d18] hover:text-[#f1f0e8]"
-              }`}
-            >
-              <Coins className="w-3.5 h-3.5" />
-              <span>Lend</span>
-            </button>
+            {hasLiveMorphoMarkets && (
+              <button
+                onClick={() => setActiveTab("lend")}
+                className={`flex items-center gap-1.5 shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                  activeTab === "lend"
+                    ? "bg-[#cfd8c6] text-[#0c0d0b] shadow-sm"
+                    : "text-[#8f9388] hover:bg-[#1a1d18] hover:text-[#f1f0e8]"
+                }`}
+              >
+                <Coins className="w-3.5 h-3.5" />
+                <span>Lend</span>
+              </button>
+            )}
 
             <button
               onClick={() => setActiveTab("chat")}
@@ -339,6 +345,11 @@ export function App() {
                 </div>
               </div>
             </div>
+
+            {/* Aerodrome Slipstream LP for this stock */}
+            <div className="pt-2">
+              <SlipstreamLpPanel stock={activeStock} />
+            </div>
           </div>
         )}
 
@@ -462,8 +473,8 @@ export function App() {
           </div>
         )}
 
-        {/* Tab 5: Credit / Lend */}
-        {activeTab === "lend" && (
+        {/* Tab 5: Credit / Lend (Only if live Morpho Blue market exists) */}
+        {hasLiveMorphoMarkets && activeTab === "lend" && (
           <div className="space-y-6">
             <div>
               <h2 className="text-2xl sm:text-3xl font-['Instrument_Serif',serif] text-[#f1f0e8]">

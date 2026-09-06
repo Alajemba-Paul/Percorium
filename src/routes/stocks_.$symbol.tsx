@@ -5,6 +5,7 @@ import { HoldersChat } from "@/components/holders-chat";
 import { LendPanel } from "@/components/lend-panel";
 import { LiquidityPanel } from "@/components/liquidity-panel";
 import { OfficialPriceBadge } from "@/components/official-price-badge";
+import { SlipstreamLpPanel } from "@/components/slipstream-lp-panel";
 import { StockChart } from "@/components/StockChart";
 import { StockMark } from "@/components/stock-mark";
 import { TradeTicket } from "@/components/trade-ticket";
@@ -89,6 +90,8 @@ function StockPage() {
         <TradeTicket symbol={stock.symbol} quote={q} />
         <LiquidityPanel symbol={stock.symbol} assetAddress={stock.address} />
       </div>
+
+      <SlipstreamLpPanel stock={stock} />
 
       <LendPanel symbol={stock.symbol} assetAddress={stock.address} />
 
