@@ -24,6 +24,7 @@ export const Route = createRootRoute({
         content:
           "Trade official Coinbase stocks on Base. Buy, swap, build stock baskets, borrow, and chat with verified holders.",
       },
+      { name: "base:app_id", content: "6a9c69226f71865e384d7e17" },
       { name: "theme-color", content: "#0a0b09" },
     ],
     links: [
