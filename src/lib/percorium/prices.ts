@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { AGGREGATOR_V3_ABI, B20_ABI } from "./abis";
 import {
+  B20_DECIMALS,
   CHAINLINK_SEQUENCER_UPTIME,
   SEQUENCER_GRACE_SEC,
   STOCKS,
@@ -127,7 +128,7 @@ export const fetchBalance = createServerFn({ method: "POST" })
       return {
         raw: raw.toString(),
         scaled: scaled.toString(),
-        units: Number(raw) / 1e18,
+        units: Number(raw) / 10 ** B20_DECIMALS,
       };
     } catch (err) {
       return {
