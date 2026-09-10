@@ -1,5 +1,5 @@
 import { parseUnits } from "viem";
-import { useAccount, useSendTransaction, useWriteContract } from "wagmi";
+import { useAccount, usePublicClient, useSendTransaction, useWriteContract } from "wagmi";
 import { useEffect, useMemo, useState } from "react";
 import {
   ExternalLink,
@@ -39,6 +39,7 @@ export function TradeTicket({
 }) {
   const stock = STOCK_BY_SYMBOL[symbol] ?? STOCKS[0];
   const { address, isConnected } = useAccount();
+  const publicClient = usePublicClient();
   const { restricted } = useEligibility();
   const board = usePriceBoard();
   const [side, setSide] = useState<SwapSide>("buy");
@@ -122,6 +123,10 @@ export function TradeTicket({
       toast.error("Connect a wallet to trade.");
       return;
     }
+    if (!publicClient) {
+      toast.error("Base RPC is not ready. Retry in a second.");
+      return;
+    }
     try {
       const sellAmount = parseUnits(amount || "0", route.sellDec).toString();
       const fresh = await fetchSwapQuote({
@@ -142,14 +147,23 @@ export function TradeTicket({
       assertZeroExTarget(fresh.to, fresh.allowanceTarget);
 
       if (fresh.allowanceTarget) {
-        toast.info(`Requesting approval for ${amount} ${route.sellSymbol}...`);
-        await writeContractAsync({
+        const current = await publicClient.readContract({
           address: route.sellToken,
           abi: ERC20_ABI,
-          functionName: "approve",
-          args: [fresh.allowanceTarget, BigInt(fresh.sellAmount)],
+          functionName: "allowance",
+          args: [address, fresh.allowanceTarget],
         });
-        toast.success(`Approval confirmed.`);
+        if (current < BigInt(fresh.sellAmount)) {
+          toast.info(`Approve ${amount} ${route.sellSymbol} in your wallet, then wait for confirmation.`);
+          const approveHash = await writeContractAsync({
+            address: route.sellToken,
+            abi: ERC20_ABI,
+            functionName: "approve",
+            args: [fresh.allowanceTarget, BigInt(fresh.sellAmount)],
+          });
+          await publicClient.waitForTransactionReceipt({ hash: approveHash });
+          toast.success("Approval confirmed on Base. Sign the swap next.");
+        }
       }
 
       const hash = await sendTransactionAsync({
@@ -160,7 +174,11 @@ export function TradeTicket({
       toast.success(`Trade submitted: ${hash.slice(0, 10)}…`);
       void balances.refetch();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Transaction cancelled");
+      const raw = err instanceof Error ? err.message : "Transaction cancelled";
+      const friendly = /reverted|Too little received|STF|TRANSFER_FROM_FAILED/i.test(raw)
+        ? "Swap reverted. Wait for the approve tx to confirm, then tap Buy again. Thin pool or leftover allowance race."
+        : raw;
+      toast.error(friendly);
     }
   }
 
@@ -332,7 +350,7 @@ export function TradeTicket({
       </Button>
 
       <p className="text-[11px] text-[#8f9388] text-center leading-relaxed font-['IBM_Plex_Sans',sans-serif]">
-        Pay with USDC. Approve in your wallet.
+        Pay with USDC. Approve first, wait for Base confirmation, then sign the swap.
       </p>
     </div>
   );
