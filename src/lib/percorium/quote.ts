@@ -2,16 +2,20 @@ import { createServerFn } from "@tanstack/react-start";
 import {
   encodeFunctionData,
   getAddress,
+  zeroAddress,
 } from "viem";
 import {
+  AERO_SLIPSTREAM_FACTORY,
   AERO_SLIPSTREAM_QUOTER_V2,
   AERO_SLIPSTREAM_ROUTER,
   BASIS_REJECT_BPS,
+  SLIPSTREAM_TICK_SPACINGS,
+  SLIPSTREAM_USDC_POOLS,
   STOCK_BY_ADDRESS,
   USDC,
-  ZERO_EX_ALLOWANCE_HOLDER,
 } from "./constants";
 import {
+  AERO_SLIPSTREAM_FACTORY_ABI,
   AERO_SLIPSTREAM_POOL_ABI,
   AERO_SLIPSTREAM_QUOTER_V2_ABI,
   AERO_SLIPSTREAM_ROUTER_ABI,
@@ -27,7 +31,6 @@ import {
   assertZeroExTarget,
 } from "./security";
 import type { QuoteRequest, QuoteResult } from "./types";
-import { fetchAerodromeSlipstreamUsdcPair } from "../dexscreener";
 
 const ZERO_EX_VERSION = "v2";
 
@@ -153,178 +156,161 @@ async function quote0x(
       },
       signal: AbortSignal.timeout(12_000),
     });
-
-    if (res.status === 422) {
-      return { quote: null, note: "" };
-    }
-
+    if (res.status === 422) return { quote: null, note: "" };
     const json = await readJson(res);
-    if (!res.ok) {
-      return { quote: null, note: `0x ${res.status}: ${errMsg(json, res.status)}` };
-    }
+    if (!res.ok) return { quote: null, note: `0x ${res.status}: ${errMsg(json, res.status)}` };
     const quote = from0xBody(json, req);
-    if (!quote) {
-      return { quote: null, note: "0x: no liquidity or untrusted route for this pair" };
-    }
-    if (!taker) {
-      quote.issues = ["0x price (connect wallet for calldata)"];
-    }
+    if (!quote) return { quote: null, note: "0x: no liquidity or untrusted route for this pair" };
+    if (!taker) quote.issues = ["0x price (connect wallet for calldata)"];
     return { quote, note: taker ? "0x quote" : "0x price" };
   } catch (err) {
-    return {
-      quote: null,
-      note: `0x network: ${err instanceof Error ? err.message : "fetch failed"}`,
-    };
+    return { quote: null, note: `0x network: ${err instanceof Error ? err.message : "fetch failed"}` };
   }
+}
+
+async function resolveSlipstreamUsdcPool(
+  client: ReturnType<typeof getPublicClient>,
+  stock: string,
+): Promise<`0x${string}` | null> {
+  const mapped = SLIPSTREAM_USDC_POOLS[stock.toLowerCase()];
+  if (mapped) return asAddr(mapped);
+  for (const tick of SLIPSTREAM_TICK_SPACINGS) {
+    try {
+      const pool = await client.readContract({
+        address: AERO_SLIPSTREAM_FACTORY,
+        abi: AERO_SLIPSTREAM_FACTORY_ABI,
+        functionName: "getPool",
+        args: [asAddr(USDC), asAddr(stock), tick],
+      });
+      if (pool && pool.toLowerCase() !== zeroAddress) return asAddr(pool);
+    } catch {
+      /* next tick */
+    }
+  }
+  return null;
 }
 
 async function quoteAerodromeSlipstream(
   req: QuoteRequest,
   slippageBps: number,
 ): Promise<RouterAttempt> {
-  const sellLc = req.sellToken.toLowerCase();
-  const buyLc = req.buyToken.toLowerCase();
-  const usdcLc = USDC.toLowerCase();
-
-  const isSellUsdc = sellLc === usdcLc;
-  const isBuyUsdc = buyLc === usdcLc;
-
-  if (isSellUsdc || isBuyUsdc) {
-    const stockAddr = isSellUsdc ? req.buyToken : req.sellToken;
-    const pair = await fetchAerodromeSlipstreamUsdcPair(stockAddr);
-    if (!pair || !pair.pairAddress) {
-      return {
-        quote: null,
-        note: "No official USDC pool for this stock yet. You cannot buy or sell here.",
-      };
-    }
-
-    try {
-      const client = getPublicClient();
-      const poolAddr = asAddr(pair.pairAddress);
-
-      const [tickSpacing, slot0] = await Promise.all([
-        client.readContract({
-          address: poolAddr,
-          abi: AERO_SLIPSTREAM_POOL_ABI,
-          functionName: "tickSpacing",
-        }),
-        client.readContract({
-          address: poolAddr,
-          abi: AERO_SLIPSTREAM_POOL_ABI,
-          functionName: "slot0",
-        }),
-      ]);
-
-      const sqrtPriceX96 = BigInt(slot0[0]);
-      if (sqrtPriceX96 === 0n) {
-        return { quote: null, note: "Aerodrome Slipstream: uninitialized pool" };
-      }
-
-      const sellRaw = BigInt(req.sellAmount);
-      let buyRaw: bigint;
-      try {
-        const quoted = await client.simulateContract({
-          address: AERO_SLIPSTREAM_QUOTER_V2,
-          abi: AERO_SLIPSTREAM_QUOTER_V2_ABI,
-          functionName: "quoteExactInputSingle",
-          args: [
-            {
-              tokenIn: asAddr(req.sellToken),
-              tokenOut: asAddr(req.buyToken),
-              amountIn: sellRaw,
-              tickSpacing,
-              sqrtPriceLimitX96: 0n,
-            },
-          ],
-        });
-        buyRaw = quoted.result[0];
-      } catch {
-        return {
-          quote: null,
-          note: "Aerodrome Slipstream: quoter rejected this size (pool too thin).",
-        };
-      }
-
-      if (buyRaw <= 0n) {
-        return { quote: null, note: "Aerodrome Slipstream: zero output" };
-      }
-
-      const minBuyAmount = (buyRaw * BigInt(10_000 - slippageBps)) / 10_000n;
-      const taker = isRealTaker(req.taker) ? asAddr(req.taker) : undefined;
-
-      let to: `0x${string}` | undefined;
-      let data: `0x${string}` | undefined;
-
-      if (taker) {
-        to = AERO_SLIPSTREAM_ROUTER;
-        data = encodeFunctionData({
-          abi: AERO_SLIPSTREAM_ROUTER_ABI,
-          functionName: "exactInputSingle",
-          args: [
-            {
-              tokenIn: asAddr(req.sellToken),
-              tokenOut: asAddr(req.buyToken),
-              tickSpacing,
-              recipient: taker,
-              deadline: BigInt(Math.floor(Date.now() / 1000) + 1200),
-              amountIn: sellRaw,
-              amountOutMinimum: minBuyAmount,
-              sqrtPriceLimitX96: 0n,
-            },
-          ],
-        });
-
-        assertZeroExTarget(to, AERO_SLIPSTREAM_ROUTER);
-      }
-
-      return {
-        quote: {
-          ok: true,
-          source: "aerodrome",
-          sellToken: req.sellToken,
-          buyToken: req.buyToken,
-          sellAmount: req.sellAmount,
-          buyAmount: buyRaw.toString(),
-          minBuyAmount: minBuyAmount.toString(),
-          price: "0",
-          to,
-          data,
-          value: "0",
-          allowanceTarget: data ? AERO_SLIPSTREAM_ROUTER : undefined,
-          executable: Boolean(to && data),
-          issues: data
-            ? ["Aerodrome Slipstream official pool"]
-            : ["Aerodrome Slipstream price (connect wallet for calldata)"],
-        },
-        note: "Aerodrome Slipstream official pool",
-      };
-    } catch (err) {
-      return {
-        quote: null,
-        note: `Aerodrome Slipstream error: ${err instanceof Error ? err.message : "query failed"}`,
-      };
-    }
+  const isSellUsdc = req.sellToken.toLowerCase() === USDC.toLowerCase();
+  const isBuyUsdc = req.buyToken.toLowerCase() === USDC.toLowerCase();
+  if (!(isSellUsdc || isBuyUsdc)) {
+    return {
+      quote: {
+        ok: true,
+        source: "aerodrome",
+        sellToken: req.sellToken,
+        buyToken: req.buyToken,
+        sellAmount: req.sellAmount,
+        buyAmount: "0",
+        price: "0",
+        executable: false,
+        issues: ["Stock-to-stock is quote-only. Route each leg through USDC."],
+      },
+      note: "Aerodrome Slipstream multi-hop not executable",
+    };
   }
 
-  return {
-    quote: {
-      ok: true,
-      source: "aerodrome",
-      sellToken: req.sellToken,
-      buyToken: req.buyToken,
-      sellAmount: req.sellAmount,
-      buyAmount: "0",
-      price: "0",
-      to: undefined,
-      data: undefined,
-      value: "0",
-      allowanceTarget: undefined,
-      executable: false,
-      issues: ["Stock-to-stock is quote-only. Route each leg through USDC."],
-    },
-    note: "Aerodrome Slipstream multi-hop not executable",
-  };
+  const stockAddr = isSellUsdc ? req.buyToken : req.sellToken;
+  const client = getPublicClient();
+  const poolAddr = await resolveSlipstreamUsdcPool(client, stockAddr);
+  if (!poolAddr) {
+    return {
+      quote: null,
+      note: "No official USDC pool for this stock yet. You cannot buy or sell here.",
+    };
+  }
+
+  try {
+    const [tickSpacing, slot0] = await Promise.all([
+      client.readContract({
+        address: poolAddr,
+        abi: AERO_SLIPSTREAM_POOL_ABI,
+        functionName: "tickSpacing",
+      }),
+      client.readContract({
+        address: poolAddr,
+        abi: AERO_SLIPSTREAM_POOL_ABI,
+        functionName: "slot0",
+      }),
+    ]);
+    if (BigInt(slot0[0]) === 0n) {
+      return { quote: null, note: "Aerodrome Slipstream: uninitialized pool" };
+    }
+
+    const sellRaw = BigInt(req.sellAmount);
+    let buyRaw: bigint;
+    try {
+      const quoted = await client.simulateContract({
+        address: AERO_SLIPSTREAM_QUOTER_V2,
+        abi: AERO_SLIPSTREAM_QUOTER_V2_ABI,
+        functionName: "quoteExactInputSingle",
+        args: [{
+          tokenIn: asAddr(req.sellToken),
+          tokenOut: asAddr(req.buyToken),
+          amountIn: sellRaw,
+          tickSpacing,
+          sqrtPriceLimitX96: 0n,
+        }],
+      });
+      buyRaw = quoted.result[0];
+    } catch {
+      return { quote: null, note: "Aerodrome Slipstream: quoter rejected this size (pool too thin)." };
+    }
+    if (buyRaw <= 0n) return { quote: null, note: "Aerodrome Slipstream: zero output" };
+
+    const minBuyAmount = (buyRaw * BigInt(10_000 - slippageBps)) / 10_000n;
+    const taker = isRealTaker(req.taker) ? asAddr(req.taker) : undefined;
+    let to: `0x${string}` | undefined;
+    let data: `0x${string}` | undefined;
+    if (taker) {
+      to = AERO_SLIPSTREAM_ROUTER;
+      data = encodeFunctionData({
+        abi: AERO_SLIPSTREAM_ROUTER_ABI,
+        functionName: "exactInputSingle",
+        args: [{
+          tokenIn: asAddr(req.sellToken),
+          tokenOut: asAddr(req.buyToken),
+          tickSpacing,
+          recipient: taker,
+          deadline: BigInt(Math.floor(Date.now() / 1000) + 1200),
+          amountIn: sellRaw,
+          amountOutMinimum: minBuyAmount,
+          sqrtPriceLimitX96: 0n,
+        }],
+      });
+      assertZeroExTarget(to, AERO_SLIPSTREAM_ROUTER);
+    }
+
+    return {
+      quote: {
+        ok: true,
+        source: "aerodrome",
+        sellToken: req.sellToken,
+        buyToken: req.buyToken,
+        sellAmount: req.sellAmount,
+        buyAmount: buyRaw.toString(),
+        minBuyAmount: minBuyAmount.toString(),
+        price: "0",
+        to,
+        data,
+        value: "0",
+        allowanceTarget: data ? AERO_SLIPSTREAM_ROUTER : undefined,
+        executable: Boolean(to && data),
+        issues: data
+          ? [`Aerodrome Slipstream V3 ${poolAddr.slice(0, 10)}…`]
+          : ["Aerodrome Slipstream price (connect wallet for calldata)"],
+      },
+      note: "Aerodrome Slipstream V3 official pool",
+    };
+  } catch (err) {
+    return {
+      quote: null,
+      note: `Aerodrome Slipstream error: ${err instanceof Error ? err.message : "query failed"}`,
+    };
+  }
 }
 
 export const fetchSwapQuote = createServerFn({ method: "POST" })
@@ -334,13 +320,8 @@ export const fetchSwapQuote = createServerFn({ method: "POST" })
       assertServerGeoNotUs();
     } catch {
       return {
-        ok: false,
-        source: "oracle",
-        sellToken: data.sellToken,
-        buyToken: data.buyToken,
-        sellAmount: data.sellAmount,
-        buyAmount: "0",
-        price: "0",
+        ok: false, source: "oracle", sellToken: data.sellToken, buyToken: data.buyToken,
+        sellAmount: data.sellAmount, buyAmount: "0", price: "0",
         error: "Access denied: Trading is restricted in your jurisdiction (US/sanctioned).",
         issues: ["geo-restricted"],
       };
@@ -351,13 +332,8 @@ export const fetchSwapQuote = createServerFn({ method: "POST" })
       pair = assertAllowedTradePair(data.sellToken, data.buyToken);
     } catch (err) {
       return {
-        ok: false,
-        source: "oracle",
-        sellToken: data.sellToken,
-        buyToken: data.buyToken,
-        sellAmount: data.sellAmount,
-        buyAmount: "0",
-        price: "0",
+        ok: false, source: "oracle", sellToken: data.sellToken, buyToken: data.buyToken,
+        sellAmount: data.sellAmount, buyAmount: "0", price: "0",
         error: err instanceof Error ? err.message : "Token is not allowlisted.",
         issues: ["allowlist-rejected"],
       };
@@ -368,13 +344,8 @@ export const fetchSwapQuote = createServerFn({ method: "POST" })
       slippageBps = assertSlippageBounds(data.slippageBps);
     } catch (err) {
       return {
-        ok: false,
-        source: "oracle",
-        sellToken: pair.sellToken,
-        buyToken: pair.buyToken,
-        sellAmount: data.sellAmount,
-        buyAmount: "0",
-        price: "0",
+        ok: false, source: "oracle", sellToken: pair.sellToken, buyToken: pair.buyToken,
+        sellAmount: data.sellAmount, buyAmount: "0", price: "0",
         error: err instanceof Error ? err.message : "Invalid slippage bounds.",
         issues: ["slippage-bounds"],
       };
@@ -386,24 +357,17 @@ export const fetchSwapQuote = createServerFn({ method: "POST" })
         validatedTaker = assertValidTaker(data.taker);
       } catch (err) {
         return {
-          ok: false,
-          source: "oracle",
-          sellToken: pair.sellToken,
-          buyToken: pair.buyToken,
-          sellAmount: data.sellAmount,
-          buyAmount: "0",
-          price: "0",
+          ok: false, source: "oracle", sellToken: pair.sellToken, buyToken: pair.buyToken,
+          sellAmount: data.sellAmount, buyAmount: "0", price: "0",
           error: err instanceof Error ? err.message : "Invalid taker wallet address.",
           issues: ["invalid-taker"],
         };
       }
     }
 
-    const issues: string[] = [];
-    issues.push(
+    const issues: string[] = [
       hasZeroExKey() ? "0x key: loaded" : "0x key: not in runtime env",
-    );
-
+    ];
     const safeReq: QuoteRequest = {
       ...data,
       sellToken: pair.sellToken,
@@ -417,13 +381,9 @@ export const fetchSwapQuote = createServerFn({ method: "POST" })
     if (!attempts.some((a) => a.quote)) {
       attempts.push(await quoteAerodromeSlipstream(safeReq, slippageBps));
     }
-
-    for (const attempt of attempts) {
-      if (attempt.note) issues.push(attempt.note);
-    }
+    for (const attempt of attempts) if (attempt.note) issues.push(attempt.note);
 
     const live = attempts.find((a) => a.quote)?.quote ?? null;
-
     const sellDec = tokenDecimals(pair.sellToken);
     const buyDec = tokenDecimals(pair.buyToken);
     const sellUnits = Number(data.sellAmount) / 10 ** sellDec;
@@ -438,24 +398,16 @@ export const fetchSwapQuote = createServerFn({ method: "POST" })
         ...live,
         price: sellUnits > 0 ? (ammBuy / sellUnits).toString() : "0",
       };
-
       if (sellPx && buyPx) {
         const oracleBuy = (sellUnits * sellPx) / buyPx;
         const bps = Math.round(((ammBuy - oracleBuy) / oracleBuy) * 10_000);
         tagged.issues = [...issues, ...(live.issues ?? []), `basis ${bps} bps vs Chainlink`];
-
         if (Math.abs(bps) > BASIS_REJECT_BPS) {
-          return {
-            ...tagged,
-            ok: false,
-            executable: false,
-            error: "AMM quote deviates too far from the Chainlink risk price.",
-          };
+          return { ...tagged, ok: false, executable: false, error: "AMM quote deviates too far from the Chainlink risk price." };
         }
       } else {
         tagged.issues = [...issues, ...(live.issues ?? [])];
       }
-
       return tagged;
     }
 
