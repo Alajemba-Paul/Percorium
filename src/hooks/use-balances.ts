@@ -2,8 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useAccount } from "wagmi";
 import { ERC20_ABI } from "@/lib/percorium/abis";
 import {
+  B20_DECIMALS,
   STOCKS,
   USDC,
+  USDC_DECIMALS,
   type StockSymbol,
 } from "@/lib/percorium/constants";
 import { getPublicClient } from "@/lib/percorium/rpc";
@@ -24,6 +26,17 @@ export type StockBalances = {
   refetch: () => Promise<unknown>;
 };
 
+const B20_SCALE = 10 ** B20_DECIMALS;
+const USDC_SCALE = 10 ** USDC_DECIMALS;
+
+function emptyStocks(): Record<StockSymbol, TokenHolding> {
+  const stocks = {} as Record<StockSymbol, TokenHolding>;
+  for (const s of STOCKS) {
+    stocks[s.symbol as StockSymbol] = { raw: "0", units: 0 };
+  }
+  return stocks;
+}
+
 export function useStockBalances(customAddress?: `0x${string}`): StockBalances {
   const { address: connectedAddress } = useAccount();
   const address = customAddress ?? connectedAddress;
@@ -32,13 +45,9 @@ export function useStockBalances(customAddress?: `0x${string}`): StockBalances {
     queryKey: ["stock-balances", address?.toLowerCase()],
     queryFn: async () => {
       if (!address) {
-        const emptyStocks = {} as Record<StockSymbol, TokenHolding>;
-        for (const s of STOCKS) {
-          emptyStocks[s.symbol as StockSymbol] = { raw: "0", units: 0 };
-        }
         return {
           usdc: { raw: "0", units: 0 },
-          stocks: emptyStocks,
+          stocks: emptyStocks(),
         };
       }
 
@@ -64,15 +73,12 @@ export function useStockBalances(customAddress?: `0x${string}`): StockBalances {
         allowFailure: true,
       });
 
-      // USDC result (6 decimals)
       const usdcRes = results[0];
       const usdcRaw =
         usdcRes.status === "success" && typeof usdcRes.result === "bigint"
           ? usdcRes.result
           : 0n;
-      const usdcUnits = Number(usdcRaw) / 1e6;
 
-      // Stock results (18 decimals)
       const stocks = {} as Record<StockSymbol, TokenHolding>;
       STOCKS.forEach((s, idx) => {
         const res = results[idx + 1];
@@ -80,15 +86,14 @@ export function useStockBalances(customAddress?: `0x${string}`): StockBalances {
           res.status === "success" && typeof res.result === "bigint"
             ? res.result
             : 0n;
-        const units = Number(raw) / 1e18;
         stocks[s.symbol as StockSymbol] = {
           raw: raw.toString(),
-          units,
+          units: Number(raw) / B20_SCALE,
         };
       });
 
       return {
-        usdc: { raw: usdcRaw.toString(), units: usdcUnits },
+        usdc: { raw: usdcRaw.toString(), units: Number(usdcRaw) / USDC_SCALE },
         stocks,
       };
     },
@@ -98,11 +103,7 @@ export function useStockBalances(customAddress?: `0x${string}`): StockBalances {
   });
 
   const usdcHolding = data?.usdc ?? { raw: "0", units: 0 };
-  const stocksHolding =
-    data?.stocks ??
-    (Object.fromEntries(
-      STOCKS.map((s) => [s.symbol, { raw: "0", units: 0 }]),
-    ) as Record<StockSymbol, TokenHolding>);
+  const stocksHolding = data?.stocks ?? emptyStocks();
 
   const effectiveUsdc = usdcHolding.units;
 
@@ -110,7 +111,9 @@ export function useStockBalances(customAddress?: `0x${string}`): StockBalances {
     return stocksHolding[sym]?.units ?? 0;
   };
 
-  const hasAnyStock = Object.values(stocksHolding).some((h) => h.units > 0);
+  const hasAnyStock = Object.values(stocksHolding).some(
+    (h) => h.units > 0 || (h.raw !== "0" && h.raw !== ""),
+  );
 
   return {
     usdc: usdcHolding,
