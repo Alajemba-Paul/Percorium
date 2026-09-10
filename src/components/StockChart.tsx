@@ -235,7 +235,7 @@ export function StockChart({
   }
 
   return (
-    <section className="rounded-xl bg-card p-4 shadow-border sm:p-5">
+    <section className="relative z-0 overflow-hidden rounded-xl bg-card p-4 shadow-border sm:p-5 isolate">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -303,15 +303,15 @@ export function StockChart({
         ))}
       </div>
 
-      <div className="relative mt-3 overflow-hidden rounded-lg bg-elevated">
+      <div className="relative z-0 mt-3 isolate overflow-hidden rounded-lg bg-elevated">
         {!frameReady ? (
-          <Skeleton className="absolute inset-0 z-10 h-full w-full rounded-lg" />
+          <Skeleton className="pointer-events-none absolute inset-0 z-10 h-full w-full rounded-lg" />
         ) : null}
         {embedSrc ? (
           <iframe
             title={`${symbol} ${activeSource} chart`}
             src={embedSrc}
-            className="h-chart w-full rounded-lg border-0 xl:h-chart-xl"
+            className="relative z-0 block h-chart w-full max-w-full rounded-lg border-0 xl:h-chart-xl"
             allow="clipboard-write"
             onLoad={() => setFrameReady(true)}
           />
