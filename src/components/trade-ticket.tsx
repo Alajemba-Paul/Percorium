@@ -75,7 +75,6 @@ export function TradeTicket({
   const buyLabel = side === "buy" ? stock.symbol : "USDC";
   const aerodromeSwapUrl = `https://aerodrome.finance/swap?from=USDC&to=${stock.address}`;
 
-  // Prefetch quote whenever stock, side, amount, or wallet changes so Buy button is fast
   useEffect(() => {
     let unmounted = false;
     async function loadQuote() {
@@ -140,7 +139,6 @@ export function TradeTicket({
         return;
       }
 
-      // Security check: verify destination and allowance spender
       assertZeroExTarget(fresh.to, fresh.allowanceTarget);
 
       if (fresh.allowanceTarget) {
@@ -184,14 +182,11 @@ export function TradeTicket({
     isBlocked ||
     sending ||
     approving ||
-    !isConnected ||
     !amount ||
-    Number(amount) <= 0 ||
-    (quoteRes !== null && !quoteRes.ok);
+    Number(amount) <= 0;
 
   return (
-    <div className="rounded-xl bg-[#131511] border border-[#262923] p-4 sm:p-5 shadow-sm space-y-4 font-['IBM_Plex_Sans',sans-serif]">
-      {/* Top Header: Ticket Title + Aerodrome deep link & Slippage */}
+    <div className="relative z-50 pointer-events-auto rounded-xl bg-[#131511] border border-[#262923] p-4 sm:p-5 shadow-sm space-y-4 font-['IBM_Plex_Sans',sans-serif]">
       <div className="flex items-center justify-between border-b border-[#262923] pb-3">
         <h2 className="font-['Instrument_Serif',serif] text-xl text-[#f1f0e8]">
           Swap
@@ -218,7 +213,6 @@ export function TradeTicket({
         </div>
       </div>
 
-      {/* Slippage Settings (Collapsible) */}
       {showSlippageConfig && (
         <div className="rounded-lg border border-[#262923] bg-[#1a1d18] p-3 text-xs space-y-2">
           <div className="flex items-center justify-between text-[#8f9388]">
@@ -247,7 +241,6 @@ export function TradeTicket({
         </div>
       )}
 
-      {/* Side Switcher: Buy or Sell */}
       <Tabs value={side} onValueChange={(v) => setSide(v as SwapSide)}>
         <TabsList className="w-full bg-[#1a1d18] border border-[#262923] p-0.5 rounded-lg grid grid-cols-2">
           <TabsTrigger
@@ -265,7 +258,6 @@ export function TradeTicket({
         </TabsList>
       </Tabs>
 
-      {/* Amount Input */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between text-xs">
           <Label className="text-xs text-[#8f9388]">
@@ -303,7 +295,6 @@ export function TradeTicket({
         />
       </div>
 
-      {/* Output Preview */}
       <div className="rounded-lg bg-[#1a1d18] border border-[#262923] p-3 text-xs space-y-1.5">
         <div className="flex items-center justify-between text-[#8f9388]">
           <span>You receive (est.)</span>
@@ -318,9 +309,9 @@ export function TradeTicket({
         </div>
       </div>
 
-      {/* Single Primary Action Button */}
       <Button
-        className="w-full h-11 rounded-lg bg-[#cfd8c6] hover:bg-[#e2ead9] text-[#0c0d0b] text-sm font-semibold transition-all duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+        type="button"
+        className="relative z-50 pointer-events-auto w-full h-11 rounded-lg bg-[#cfd8c6] hover:bg-[#e2ead9] text-[#0c0d0b] text-sm font-semibold transition-all duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         disabled={isButtonDisabled}
         onClick={onExecute}
       >
@@ -340,7 +331,6 @@ export function TradeTicket({
         )}
       </Button>
 
-      {/* Footer Disclaimer */}
       <p className="text-[11px] text-[#8f9388] text-center leading-relaxed font-['IBM_Plex_Sans',sans-serif]">
         Pay with USDC. Approve in your wallet.
       </p>
