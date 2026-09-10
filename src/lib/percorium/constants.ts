@@ -7,14 +7,24 @@ export const WETH = "0x4200000000000000000000000000000000000006" as const;
 export const PERMIT2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3" as const;
 export const UNI_V4_UNIVERSAL_ROUTER =
   "0x6fF5693b99212Da76ad316178A184AB56D299b43" as const;
-export const AERO_SLIPSTREAM_ROUTER =
+
+/** Legacy Slipstream (pre-Gauges V3). B20 USDC books are NOT here. */
+export const AERO_SLIPSTREAM_ROUTER_LEGACY =
   "0xBE6D8f0d05cC4be24d5167a3eF062215bE6D18a5" as const;
-export const AERO_SLIPSTREAM_NFPM =
-  "0x827922686190790b37229fd06084350E74485b72" as const;
-export const AERO_SLIPSTREAM_FACTORY =
+export const AERO_SLIPSTREAM_FACTORY_LEGACY =
   "0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A" as const;
-export const AERO_SLIPSTREAM_QUOTER_V2 =
+export const AERO_SLIPSTREAM_QUOTER_LEGACY =
   "0x254cF9E1E6e233aa1AC962CB9B05b2cfeAaE15b0" as const;
+
+/** Gauges V3 / Slipstream 3 — live B20 USDC pools. Simulated 2026-09-10. */
+export const AERO_SLIPSTREAM_ROUTER =
+  "0x698Cb2b6dd822994581fEa6eA4Fc755d1363A92F" as const;
+export const AERO_SLIPSTREAM_NFPM =
+  "0xe1f8cd9AC4e4A65F54f38a5CdAfCA44f6dD68b53" as const;
+export const AERO_SLIPSTREAM_FACTORY =
+  "0xf8f2eB4940CFE7d13603DDDD87f123820Fc061Ef" as const;
+export const AERO_SLIPSTREAM_QUOTER_V2 =
+  "0x514c8B5f54112481E28028F1166Bd78501089259" as const;
 export const AERO_UNIVERSAL_ROUTER =
   "0x6Cb442acF35158D5eDa88fe602221b67B400Be3E" as const;
 export const AERO_ROUTER =
@@ -23,6 +33,22 @@ export const AERO_FACTORY =
   "0x420DD381b31aEf6683db6B902084cB0FFECe40Da" as const;
 export const ZERO_EX_ALLOWANCE_HOLDER =
   "0x0000000000001fF3684f28c67538d4D072C22734" as const;
+
+export const SLIPSTREAM_TICK_SPACINGS = [10, 1, 50, 100, 200] as const;
+
+/** Official B20 / USDC Slipstream V3 pools (factory getPool, tick 10). */
+export const SLIPSTREAM_USDC_POOLS: Record<string, `0x${string}`> = {
+  "0xb200000000000000000000c2e324d24d7eecd1fb": "0xa3b1e3f9747065e2073722ff4c9027d3ea4994f0",
+  "0xb200000000000000000000d9192b6b456483c2e8": "0xd03bc8c7f2faedce2aac81bf0444aea08ea06e9b",
+  "0xb2000000000000000000002d0ba3164cc74f58b7": "0xb1987cad1682841b4b641d50e520777ec5ab5542",
+  "0xb2000000000000000000008bc8786b856e61707c": "0xeaf57753bc382e0324a1d43f72e7027705a2273e",
+  "0xb200000000000000000000ab99cfa739e253872b": "0x7103eb3c9590d1281f7dc03b2a9ee27c39df5d54",
+  "0xb2000000000000000000004884b426556b92883d": "0x8b27f626ab668197000bc722a1012022caed10e2",
+  "0xb20000000000000000000078ee7ce2fe4908108c": "0x853f5f1b92b16714fe6cda67caad0856b83c7ab9",
+  "0xb200000000000000000000397293cb8cda9a10c5": "0x5a8236f575471e7bfca2c8462a200c28f737246e",
+  "0xb2000000000000000000007b9fcbd005511acbd5": "0x0bf58fe0fac935ac69595c19b12ba0d75e3f8c0e",
+  "0xb2000000000000000000001e800a7f5189430cd0": "0x469337fdcc5e8f38e2e4b670b04f57865d13a7bb",
+};
 
 export const B20_FACTORY = "0xB20f000000000000000000000000000000000000" as const;
 export const B20_ACTIVATION_REGISTRY =
@@ -49,7 +75,7 @@ export const BASIS_WARN_BPS = 150;
 export const BASIS_REJECT_BPS = 400;
 export const DEFAULT_INDEX_LTV_BPS = 6000;
 export const PROTOCOL_FEE_BPS = 30;
-export const CREATOR_ROYALTY_BPS = 6; // 20% of 30bps
+export const CREATOR_ROYALTY_BPS = 6;
 export const MAX_INDEX_NAMES = 10;
 export const MIN_INDEX_NAMES = 2;
 
@@ -101,136 +127,19 @@ export type StockMeta = {
 };
 
 export const STOCKS: readonly StockMeta[] = [
-  {
-    symbol: "AAPLc",
-    underlying: "AAPL",
-    name: "Apple",
-    company: "Apple Inc.",
-    sector: "Technology",
-    address: CB_STOCKS.AAPLc,
-    feed: CHAINLINK_CB.AAPL,
-    listed: true,
-  },
-  {
-    symbol: "AMZNc",
-    underlying: "AMZN",
-    name: "Amazon",
-    company: "Amazon.com, Inc.",
-    sector: "Consumer",
-    address: CB_STOCKS.AMZNc,
-    feed: CHAINLINK_CB.AMZN,
-    listed: true,
-  },
-  {
-    symbol: "COINc",
-    underlying: "COIN",
-    name: "Coinbase",
-    company: "Coinbase Global, Inc.",
-    sector: "Crypto",
-    address: CB_STOCKS.COINc,
-    feed: CHAINLINK_CB.COIN,
-    listed: true,
-  },
-  {
-    symbol: "CRCLc",
-    underlying: "CRCL",
-    name: "Circle",
-    company: "Circle Internet Group",
-    sector: "Crypto",
-    address: CB_STOCKS.CRCLc,
-    feed: CHAINLINK_CB.CRCL,
-    listed: true,
-  },
-  {
-    symbol: "GOOGLc",
-    underlying: "GOOGL",
-    name: "Alphabet",
-    company: "Alphabet Inc.",
-    sector: "Technology",
-    address: CB_STOCKS.GOOGLc,
-    feed: CHAINLINK_CB.GOOGL,
-    listed: true,
-  },
-  {
-    symbol: "INTCc",
-    underlying: "INTC",
-    name: "Intel",
-    company: "Intel Corporation",
-    sector: "Semiconductors",
-    address: CB_STOCKS.INTCc,
-    feed: CHAINLINK_CB.INTC,
-    listed: true,
-  },
-  {
-    symbol: "METAc",
-    underlying: "META",
-    name: "Meta",
-    company: "Meta Platforms, Inc.",
-    sector: "Technology",
-    address: CB_STOCKS.METAc,
-    feed: CHAINLINK_CB.META,
-    listed: true,
-  },
-  {
-    symbol: "MSFTc",
-    underlying: "MSFT",
-    name: "Microsoft",
-    company: "Microsoft Corporation",
-    sector: "Technology",
-    address: CB_STOCKS.MSFTc,
-    feed: CHAINLINK_CB.MSFT,
-    listed: true,
-  },
-  {
-    symbol: "MSTRc",
-    underlying: "MSTR",
-    name: "Strategy",
-    company: "Strategy Inc.",
-    sector: "Bitcoin treasury",
-    address: CB_STOCKS.MSTRc,
-    feed: CHAINLINK_CB.MSTR,
-    listed: true,
-  },
-  {
-    symbol: "NVDAc",
-    underlying: "NVDA",
-    name: "NVIDIA",
-    company: "NVIDIA Corporation",
-    sector: "Semiconductors",
-    address: CB_STOCKS.NVDAc,
-    feed: CHAINLINK_CB.NVDA,
-    listed: true,
-  },
-  {
-    symbol: "SNDKc",
-    underlying: "SNDK",
-    name: "Sandisk",
-    company: "Sandisk Corporation",
-    sector: "Semiconductors",
-    address: CB_STOCKS.SNDKc,
-    feed: CHAINLINK_CB.SNDK,
-    listed: true,
-  },
-  {
-    symbol: "SPCXc",
-    underlying: "SPCX",
-    name: "SpaceX",
-    company: "Space Exploration Technologies",
-    sector: "Aerospace",
-    address: CB_STOCKS.SPCXc,
-    feed: CHAINLINK_CB.SPCX,
-    listed: true,
-  },
-  {
-    symbol: "TSLAc",
-    underlying: "TSLA",
-    name: "Tesla",
-    company: "Tesla, Inc.",
-    sector: "Automotive",
-    address: CB_STOCKS.TSLAc,
-    feed: CHAINLINK_CB.TSLA,
-    listed: true,
-  },
+  { symbol: "AAPLc", underlying: "AAPL", name: "Apple", company: "Apple Inc.", sector: "Technology", address: CB_STOCKS.AAPLc, feed: CHAINLINK_CB.AAPL, listed: true },
+  { symbol: "AMZNc", underlying: "AMZN", name: "Amazon", company: "Amazon.com, Inc.", sector: "Consumer", address: CB_STOCKS.AMZNc, feed: CHAINLINK_CB.AMZN, listed: true },
+  { symbol: "COINc", underlying: "COIN", name: "Coinbase", company: "Coinbase Global, Inc.", sector: "Crypto", address: CB_STOCKS.COINc, feed: CHAINLINK_CB.COIN, listed: true },
+  { symbol: "CRCLc", underlying: "CRCL", name: "Circle", company: "Circle Internet Group", sector: "Crypto", address: CB_STOCKS.CRCLc, feed: CHAINLINK_CB.CRCL, listed: true },
+  { symbol: "GOOGLc", underlying: "GOOGL", name: "Alphabet", company: "Alphabet Inc.", sector: "Technology", address: CB_STOCKS.GOOGLc, feed: CHAINLINK_CB.GOOGL, listed: true },
+  { symbol: "INTCc", underlying: "INTC", name: "Intel", company: "Intel Corporation", sector: "Semiconductors", address: CB_STOCKS.INTCc, feed: CHAINLINK_CB.INTC, listed: true },
+  { symbol: "METAc", underlying: "META", name: "Meta", company: "Meta Platforms, Inc.", sector: "Technology", address: CB_STOCKS.METAc, feed: CHAINLINK_CB.META, listed: true },
+  { symbol: "MSFTc", underlying: "MSFT", name: "Microsoft", company: "Microsoft Corporation", sector: "Technology", address: CB_STOCKS.MSFTc, feed: CHAINLINK_CB.MSFT, listed: true },
+  { symbol: "MSTRc", underlying: "MSTR", name: "Strategy", company: "Strategy Inc.", sector: "Bitcoin treasury", address: CB_STOCKS.MSTRc, feed: CHAINLINK_CB.MSTR, listed: true },
+  { symbol: "NVDAc", underlying: "NVDA", name: "NVIDIA", company: "NVIDIA Corporation", sector: "Semiconductors", address: CB_STOCKS.NVDAc, feed: CHAINLINK_CB.NVDA, listed: true },
+  { symbol: "SNDKc", underlying: "SNDK", name: "Sandisk", company: "Sandisk Corporation", sector: "Semiconductors", address: CB_STOCKS.SNDKc, feed: CHAINLINK_CB.SNDK, listed: true },
+  { symbol: "SPCXc", underlying: "SPCX", name: "SpaceX", company: "Space Exploration Technologies", sector: "Aerospace", address: CB_STOCKS.SPCXc, feed: CHAINLINK_CB.SPCX, listed: true },
+  { symbol: "TSLAc", underlying: "TSLA", name: "Tesla", company: "Tesla, Inc.", sector: "Automotive", address: CB_STOCKS.TSLAc, feed: CHAINLINK_CB.TSLA, listed: true },
 ] as const;
 
 export const STOCK_BY_SYMBOL: Record<StockSymbol, StockMeta> = Object.fromEntries(
@@ -254,18 +163,7 @@ export const BASE_RPC_FALLBACKS = [
 ] as const;
 
 export const RESTRICTED_COUNTRIES = new Set([
-  "US",
-  "PR",
-  "GU",
-  "VI",
-  "AS",
-  "MP",
-  "CU",
-  "IR",
-  "KP",
-  "SY",
-  "RU",
-  "BY",
+  "US", "PR", "GU", "VI", "AS", "MP", "CU", "IR", "KP", "SY", "RU", "BY",
 ]);
 
 export const COMPLIANCE_COPY =
